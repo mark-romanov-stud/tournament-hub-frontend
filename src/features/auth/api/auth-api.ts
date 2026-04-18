@@ -20,8 +20,28 @@ import type {
   RegisterInput,
 } from '@/features/auth/model/types'
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? 'https://tournament-hub-backend.onrender.com/api/v1'
+function resolveApiBaseUrl() {
+  const configuredApiUrl = import.meta.env.VITE_API_URL
+
+  if (!configuredApiUrl) {
+    return 'https://tournament-hub-backend.onrender.com/api/v1'
+  }
+
+  if (/^https?:\/\//.test(configuredApiUrl)) {
+    return configuredApiUrl
+  }
+
+  const runtimeOrigin =
+    typeof window !== 'undefined' &&
+    window.location?.origin &&
+    window.location.origin !== 'null'
+      ? window.location.origin
+      : 'http://localhost'
+
+  return new URL(configuredApiUrl, runtimeOrigin).toString()
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 interface AuthStateShape {
   auth: {

@@ -124,6 +124,20 @@ Important behavior:
 - only one refresh attempt is made per failed protected request
 - failed refresh clears client auth state
 
+### Local Development Against Hosted Backend
+
+[vite.config.ts](/Users/mromanov/extra/tournament-hub-frontend/vite.config.ts) includes a Vite dev proxy for `/api`.
+
+This supports a specific local workflow:
+
+1. Create `.env.local`.
+2. Set `VITE_API_URL=/api/v1`.
+3. Run the frontend through Vite dev server.
+
+In that mode, browser requests stay same-origin to `http://localhost:5173`, while Vite forwards `/api/*` to `https://tournament-hub-backend.onrender.com`.
+
+This is intentionally documented as a dev-only workaround. It does not fix the deployed backend contract itself, and refresh/logout can still be unreliable until backend CORS and cookie settings are corrected.
+
 ## Testing Strategy
 
 ### Unit
