@@ -36,7 +36,7 @@ Default app URL:
 
 The frontend can target the deployed backend by default, but the API base URL can be overridden.
 
-Create `.env.local` if needed:
+For local development against a local backend, create `.env.local`:
 
 ```bash
 VITE_API_URL=http://localhost:3000/api/v1
@@ -45,6 +45,21 @@ VITE_API_URL=http://localhost:3000/api/v1
 Default fallback:
 
 - `https://tournament-hub-backend.onrender.com/api/v1`
+
+For local development against the hosted backend, use the Vite dev proxy instead of calling the production origin directly from the browser.
+
+1. Create `.env.local` from `.env.example`.
+2. Set:
+
+```bash
+VITE_API_URL=/api/v1
+```
+
+3. Run `npm run dev`.
+
+The Vite dev server proxies `/api/*` to `https://tournament-hub-backend.onrender.com`.
+
+This is a dev-only workaround, not a real backend fix. It exists because the hosted backend currently returns `Access-Control-Allow-Origin: *` together with `Access-Control-Allow-Credentials: true`, which browsers reject for `credentials: include` requests.
 
 ## Available Routes
 
@@ -148,20 +163,6 @@ Main test files:
 - `src/app/auth-routing.test.tsx`
 
 ## Manual Smoke Test
-## CI/CD
-
-The repository is prepared for:
-
-- GitHub Actions CI on pull requests to `main`
-- branch protection with required `ci` status checks
-- Vercel Preview Deployments for branches and pull requests
-- Vercel Production Deployment on merge to `main`
-
-Vercel-specific project configuration lives in [vercel.json](/Users/mromanov/extra/tournament-hub-frontend/vercel.json).
-
-For setup details, see [docs/ci-cd.md](./docs/ci-cd.md).
-
-## Why this setup
 
 1. Open `/`.
    Expected: redirect to `/login`.
@@ -176,4 +177,8 @@ For setup details, see [docs/ci-cd.md](./docs/ci-cd.md).
 
 ## Known Backend Caveat
 
-The frontend fails closed when refresh cannot recover a session, but the deployed backend currently appears to have cross-origin fingerprint/CORS issues. Because of that, refresh/logout can be less reliable against the hosted environment than against a correctly configured local backend.
+The frontend fails closed when refresh cannot recover a session, but the deployed backend currently appears to have cross-origin fingerprint/CORS issues. Because of that:
+
+- direct browser calls from `http://localhost:5173` to the hosted backend can fail due to CORS
+- local development against the hosted backend should go through the Vite dev proxy
+- even with the proxy workaround, `refresh` and `logout` can remain unstable until the backend cookie configuration is corrected

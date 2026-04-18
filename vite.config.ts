@@ -12,4 +12,13 @@ export default defineConfig({
       '~': path.resolve(fileURLToPath(new URL('.', import.meta.url)), './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'https://tournament-hub-backend.onrender.com',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
 })
