@@ -148,6 +148,20 @@ Main test files:
 - `src/app/auth-routing.test.tsx`
 
 ## Manual Smoke Test
+## CI/CD
+
+The repository is prepared for:
+
+- GitHub Actions CI on pull requests to `main`
+- branch protection with required `ci` status checks
+- Vercel Preview Deployments for branches and pull requests
+- Vercel Production Deployment on merge to `main`
+
+Vercel-specific project configuration lives in [vercel.json](/Users/mromanov/extra/tournament-hub-frontend/vercel.json).
+
+For setup details, see [docs/ci-cd.md](./docs/ci-cd.md).
+
+## Why this setup
 
 1. Open `/`.
    Expected: redirect to `/login`.
