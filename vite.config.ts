@@ -14,7 +14,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': {
+      '/api/v1': {
         target: 'https://tournament-hub-backend.onrender.com',
         changeOrigin: true,
         secure: true,
