@@ -31,14 +31,7 @@ function resolveApiBaseUrl() {
     return configuredApiUrl
   }
 
-  const runtimeOrigin =
-    typeof window !== 'undefined' &&
-    window.location?.origin &&
-    window.location.origin !== 'null'
-      ? window.location.origin
-      : 'http://localhost'
-
-  return new URL(configuredApiUrl, runtimeOrigin).toString()
+  return new URL(configuredApiUrl, window.location.origin).toString()
 }
 
 const API_BASE_URL = resolveApiBaseUrl()
@@ -65,16 +58,14 @@ function isPublicAuthRequest(args: string | FetchArgs) {
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
-  credentials: 'include',
   prepareHeaders: (headers, api) => {
     const state = api.getState() as AuthStateShape
-    const accessToken = state.auth.tokens?.accessToken
+
+    const accessToken = state.auth.tokens?.accessToken ?? loadStoredSession()?.accessToken
 
     if (accessToken && !headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${accessToken}`)
     }
-
-    headers.set('Content-Type', 'application/json')
 
     return headers
   },
@@ -93,6 +84,7 @@ const baseQueryWithReauth: BaseQueryFn<
     !isPublicAuthRequest(args)
   ) {
     const state = api.getState() as AuthStateShape
+
     const refreshToken =
       state.auth.tokens?.refreshToken ?? loadStoredSession()?.refreshToken
 
@@ -122,6 +114,7 @@ const baseQueryWithReauth: BaseQueryFn<
       if (refreshResponse.data) {
         persistTokens(refreshResponse.data)
         api.dispatch(authActions.tokensReceived(refreshResponse.data))
+
         result = await rawBaseQuery(args, api, extraOptions)
       }
     }
@@ -155,6 +148,7 @@ export const authApi = createApi({
       }),
       transformResponse: unwrapResponseData,
     }),
+
     login: builder.mutation<AuthTokens, LoginInput>({
       query: (body) => ({
         url: '/auth/login',
@@ -163,6 +157,7 @@ export const authApi = createApi({
       }),
       transformResponse: unwrapResponseData,
     }),
+
     refresh: builder.mutation<AuthTokens, { refreshToken: string }>({
       query: ({ refreshToken }) => ({
         url: '/auth/refresh',
@@ -174,6 +169,7 @@ export const authApi = createApi({
       }),
       transformResponse: unwrapResponseData,
     }),
+
     getProfile: builder.query<AuthUser, void>({
       query: () => ({
         url: '/users/profile',
@@ -181,6 +177,7 @@ export const authApi = createApi({
       }),
       transformResponse: unwrapResponseData,
     }),
+
     logout: builder.mutation<boolean, void>({
       query: () => ({
         url: '/auth/logout',

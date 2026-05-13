@@ -1,0 +1,274 @@
+.create-tournament-page {
+  position: relative;
+  min-height: 100vh;
+  max-width: 390px;
+  margin: 0 auto;
+  padding-bottom: 96px;
+  color: #111827;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  background: #f7f9fb;
+}
+
+.create-tournament-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 24px;
+  background: #fff;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.brand {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #2563eb;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.brand-icon {
+  font-size: 18px;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  background: #111827;
+  border-radius: 999px;
+}
+
+.create-tournament-content {
+  padding: 32px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.create-tournament-title {
+  max-width: 300px;
+  margin: 0;
+  color: #111827;
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+.create-tournament-description {
+  max-width: 300px;
+  margin: 20px 0 40px;
+  color: #667085;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.create-tournament-card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 8%);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field span,
+.visibility-field legend {
+  color: #27272a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  color: #111827;
+  font: inherit;
+  font-size: 15px;
+  background: #fff;
+  border: 1px solid #e6eaf0;
+  border-radius: 6px;
+  outline: none;
+}
+
+.field input,
+.field select {
+  height: 48px;
+  padding: 0 14px;
+}
+
+.visibility-toggle input {
+  display: none;
+}
+
+.field textarea {
+  min-height: 112px;
+  padding: 14px;
+  resize: vertical;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+  color: #9aa3b2;
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 12%);
+}
+
+.field input[aria-invalid='true'],
+.field textarea[aria-invalid='true'],
+.field select[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+
+.visibility-field {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.visibility-field legend {
+  margin-bottom: 10px;
+}
+
+.visibility-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  height: 48px;
+  padding: 4px;
+  background: #f1f3f6;
+  border-radius: 6px;
+}
+
+.visibility-toggle label {
+  cursor: pointer;
+}
+
+.visibility-toggle span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 800;
+  border-radius: 5px;
+}
+
+.visibility-toggle input:checked + span {
+  color: #2563eb;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 8%);
+}
+
+.create-button {
+  height: 56px;
+  margin-top: 16px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  cursor: pointer;
+  background: #2563eb;
+  border: 0;
+  border-radius: 6px;
+  box-shadow: 0 14px 28px rgb(37 99 235 / 28%);
+}
+
+.create-button:hover {
+  background: #1d4ed8;
+}
+
+.create-button:active {
+  transform: translateY(1px);
+}
+
+.draft-hint {
+  margin: -8px 0 0;
+  color: #7b8494;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  width: 100%;
+  max-width: 390px;
+  height: 64px;
+  background: #fff;
+  border-top: 1px solid #edf1f5;
+  box-shadow: 0 -10px 30px rgb(15 23 42 / 5%);
+  transform: translateX(-50%);
+}
+
+.bottom-nav a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  margin: 0 8px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 900;
+  text-decoration: none;
+  text-transform: uppercase;
+  border-radius: 8px;
+}
+
+.bottom-nav a.active {
+  color: #2563eb;
+  background: #f1f6ff;
+}
+
+.field-error,
+.form-error {
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.form-error {
+  padding: 12px;
+  margin: 0;
+  background: #fef2f2;
+  border-radius: 8px;
+}
