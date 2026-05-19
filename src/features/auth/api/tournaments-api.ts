@@ -55,7 +55,15 @@ export const tournamentsApi = authApi.injectEndpoints({
       }),
       transformResponse: (response: { data: Tournament }) => response.data,
     }),
+
+    getTournament: builder.query<Tournament, string>({
+      query: (id) => ({
+        url: `/tournaments/${id}`,
+        method: 'GET',
+      }),
+      transformResponse: (response: { data: Tournament }) => response.data,
+    }),
   }),
 })
 
-export const { useCreateTournamentMutation } = tournamentsApi
+export const { useCreateTournamentMutation, useGetTournamentQuery } = tournamentsApi

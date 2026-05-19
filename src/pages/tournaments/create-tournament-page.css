@@ -1,36 +1,27 @@
 .create-tournament-page {
   position: relative;
   min-height: 100vh;
-  max-width: 390px;
-  margin: 0 auto;
-  padding-bottom: 96px;
-  color: #111827;
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
-  background: #f7f9fb;
+  width: 100%;
+  color: var(--text-main);
+  font-family: var(--font-body);
 }
 
 .create-tournament-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
-  padding: 0 24px;
-  background: #fff;
-  border-bottom: 1px solid #edf1f5;
+  width: min(100%, 1180px);
+  height: 80px;
+  margin: 0 auto;
+  padding: 0 32px;
 }
 
 .brand {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
-  color: #2563eb;
-  font-size: 15px;
+  color: var(--brand);
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -42,53 +33,75 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: 16px;
-  background: #111827;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  background: var(--surface-contrast);
   border-radius: 999px;
 }
 
 .create-tournament-content {
-  padding: 32px;
+  display: grid;
+  grid-template-areas:
+    'eyebrow form'
+    'title form'
+    'description form';
+  grid-template-columns: minmax(420px, 520px) minmax(440px, 520px);
+  gap: 28px 96px;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 1180px);
+  min-height: calc(100vh - 80px);
+  margin: 0 auto;
+  padding: 48px 32px 120px;
 }
 
 .eyebrow {
-  margin: 0 0 12px;
-  color: #2563eb;
-  font-size: 11px;
+  grid-area: eyebrow;
+  align-self: end;
+  margin: 0;
+  color: var(--brand);
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .create-tournament-title {
-  max-width: 300px;
+  grid-area: title;
+  align-self: start;
+  max-width: 520px;
   margin: 0;
-  color: #111827;
-  font-size: 32px;
+  color: var(--text-main);
+  font-family: var(--font-heading);
+  font-size: clamp(3.5rem, 5vw, 5.25rem);
   font-weight: 900;
-  line-height: 1.12;
-  letter-spacing: -0.04em;
+  line-height: 0.96;
+  letter-spacing: -0.06em;
 }
 
 .create-tournament-description {
-  max-width: 300px;
-  margin: 20px 0 40px;
-  color: #667085;
-  font-size: 15px;
-  line-height: 1.55;
+  grid-area: description;
+  align-self: start;
+  max-width: 420px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 18px;
+  line-height: 1.6;
 }
 
 .create-tournament-card {
+  grid-area: form;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 32px;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 24px 60px rgb(15 23 42 / 8%);
+  width: 100%;
+  padding: 34px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
 }
 
 .field {
@@ -108,18 +121,18 @@
 .field textarea,
 .field select {
   width: 100%;
-  color: #111827;
+  color: var(--text-main);
   font: inherit;
   font-size: 15px;
   background: #fff;
   border: 1px solid #e6eaf0;
-  border-radius: 6px;
+  border-radius: 10px;
   outline: none;
 }
 
 .field input,
 .field select {
-  height: 48px;
+  height: 52px;
   padding: 0 14px;
 }
 
@@ -128,7 +141,7 @@
 }
 
 .field textarea {
-  min-height: 112px;
+  min-height: 120px;
   padding: 14px;
   resize: vertical;
 }
@@ -141,7 +154,7 @@
 .field input:focus,
 .field textarea:focus,
 .field select:focus {
-  border-color: #2563eb;
+  border-color: var(--brand);
   box-shadow: 0 0 0 3px rgb(37 99 235 / 12%);
 }
 
@@ -165,10 +178,10 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
-  height: 48px;
+  height: 52px;
   padding: 4px;
   background: #f1f3f6;
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
 .visibility-toggle label {
@@ -179,34 +192,34 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 40px;
+  height: 44px;
   color: #4b5563;
   font-size: 14px;
   font-weight: 800;
-  border-radius: 5px;
+  border-radius: 8px;
 }
 
 .visibility-toggle input:checked + span {
-  color: #2563eb;
+  color: var(--brand);
   background: #fff;
   box-shadow: 0 1px 4px rgb(15 23 42 / 8%);
 }
 
 .create-button {
-  height: 56px;
-  margin-top: 16px;
+  height: 60px;
+  margin-top: 12px;
   color: #fff;
   font-size: 16px;
   font-weight: 900;
   cursor: pointer;
-  background: #2563eb;
+  background: var(--brand);
   border: 0;
-  border-radius: 6px;
+  border-radius: 16px;
   box-shadow: 0 14px 28px rgb(37 99 235 / 28%);
 }
 
 .create-button:hover {
-  background: #1d4ed8;
+  background: var(--brand-strong);
 }
 
 .create-button:active {
@@ -215,7 +228,7 @@
 
 .draft-hint {
   margin: -8px 0 0;
-  color: #7b8494;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -225,36 +238,36 @@
 
 .bottom-nav {
   position: fixed;
-  bottom: 0;
-  left: 50%;
+  right: 32px;
+  bottom: 32px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  align-items: center;
-  width: 100%;
-  max-width: 390px;
-  height: 64px;
-  background: #fff;
-  border-top: 1px solid #edf1f5;
-  box-shadow: 0 -10px 30px rgb(15 23 42 / 5%);
-  transform: translateX(-50%);
+  grid-template-columns: repeat(3, auto);
+  gap: 8px;
+  padding: 8px;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(18px);
 }
 
 .bottom-nav a {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 110px;
   height: 48px;
-  margin: 0 8px;
+  padding: 0 16px;
   color: #94a3b8;
   font-size: 10px;
   font-weight: 900;
   text-decoration: none;
   text-transform: uppercase;
-  border-radius: 8px;
+  border-radius: 14px;
 }
 
 .bottom-nav a.active {
-  color: #2563eb;
+  color: var(--brand);
   background: #f1f6ff;
 }
 
@@ -271,4 +284,74 @@
   margin: 0;
   background: #fef2f2;
   border-radius: 8px;
+}
+
+@media (width < 760px) {
+  .create-tournament-page {
+    padding-bottom: 96px;
+  }
+
+  .create-tournament-header {
+    height: 64px;
+    padding: 0 24px;
+    background: #fff;
+    border-bottom: 1px solid #edf1f5;
+  }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .create-tournament-content {
+    display: block;
+    min-height: auto;
+    padding: 32px;
+  }
+
+  .create-tournament-title,
+  .create-tournament-description {
+    max-width: 300px;
+  }
+
+  .create-tournament-title {
+    margin: 20px 0 16px;
+    font-size: 32px;
+    line-height: 1.12;
+  }
+
+  .create-tournament-description {
+    margin: 0 0 40px;
+    font-size: 15px;
+  }
+
+  .create-tournament-card {
+    padding: 32px;
+    border-radius: 8px;
+  }
+
+  .bottom-nav {
+    right: auto;
+    bottom: 0;
+    left: 50%;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    width: 100%;
+    max-width: 390px;
+    height: 64px;
+    padding: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+    transform: translateX(-50%);
+  }
+
+  .bottom-nav a {
+    min-width: 0;
+    height: 48px;
+    margin: 0 8px;
+    padding: 0;
+  }
 }

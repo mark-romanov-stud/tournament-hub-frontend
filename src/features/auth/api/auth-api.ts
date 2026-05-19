@@ -58,6 +58,7 @@ function isPublicAuthRequest(args: string | FetchArgs) {
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
+  credentials: 'include',
   prepareHeaders: (headers, api) => {
     const state = api.getState() as AuthStateShape
 

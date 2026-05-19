@@ -17,6 +17,7 @@ interface FormErrors {
 }
 
 const fallbackApiErrorMessage = 'Failed to create tournament. Please try again.'
+const durationOptions = [15, 30, 45]
 
 const getApiErrorMessage = (error: unknown): string => {
   if (typeof error === 'object' && error !== null && 'data' in error) {
@@ -38,6 +39,8 @@ export function CreateTournamentPage() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [rounds, setRounds] = useState(3)
+  const [submissionDurationSeconds, setSubmissionDurationSeconds] = useState(30)
+  const [voteDurationSeconds, setVoteDurationSeconds] = useState(30)
   const [visibility, setVisibility] = useState<TournamentVisibility>('public')
   const [errors, setErrors] = useState<FormErrors>({})
 
@@ -90,15 +93,13 @@ export function CreateTournamentPage() {
         description: description.trim(),
         visibility,
         roundsCount: rounds,
-        submissionDurationSeconds: 30,
-        voteDurationSeconds: 30,
+        submissionDurationSeconds,
+        voteDurationSeconds,
       }
 
       const tournament = await createTournament(requestBody).unwrap()
 
-      void navigate(`/tournaments/${tournament.id}`, {
-        state: { tournament },
-      })
+      void navigate(`/tournaments/${tournament.id}`)
     } catch (error) {
       setErrors({
         api: getApiErrorMessage(error),
@@ -185,9 +186,42 @@ export function CreateTournamentPage() {
               <option value="2">2 Rounds</option>
               <option value="3">3 Rounds</option>
               <option value="4">4 Rounds</option>
-              <option value="5">5 Rounds</option>
             </select>
             {errors.rounds ? <span className="field-error">{errors.rounds}</span> : null}
+          </label>
+
+          <label className="field">
+            <span>Submission Duration</span>
+            <select
+              name="submissionDurationSeconds"
+              value={submissionDurationSeconds}
+              onChange={(event) => {
+                setSubmissionDurationSeconds(Number(event.target.value))
+              }}
+            >
+              {durationOptions.map((duration) => (
+                <option key={duration} value={duration}>
+                  {duration} seconds
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Vote Duration</span>
+            <select
+              name="voteDurationSeconds"
+              value={voteDurationSeconds}
+              onChange={(event) => {
+                setVoteDurationSeconds(Number(event.target.value))
+              }}
+            >
+              {durationOptions.map((duration) => (
+                <option key={duration} value={duration}>
+                  {duration} seconds
+                </option>
+              ))}
+            </select>
           </label>
 
           <fieldset className="visibility-field">
