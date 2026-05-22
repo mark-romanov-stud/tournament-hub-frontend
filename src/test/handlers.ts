@@ -12,6 +12,25 @@ export const DEFAULT_AUTH_STATE = {
   refreshToken: 'refresh-token-1',
 } as const
 
+export const DEFAULT_TOURNAMENT_STATE = {
+  id: '72293376-2d85-4f8b-a4bd-9140462f3d8a',
+  title: 'Grand Invitational',
+  description: 'A tournament for realtime testing.',
+  visibility: 'PUBLIC',
+  status: 'DRAFT',
+  roundsCount: 3,
+  submissionDurationSeconds: 30,
+  voteDurationSeconds: 30,
+  ownerId: DEFAULT_AUTH_STATE.user.id,
+  participants: [
+    {
+      userId: DEFAULT_AUTH_STATE.user.id,
+      cumulativeScore: 0,
+    },
+  ],
+  currentRound: null,
+} as const
+
 interface MockAuthState {
   user: {
     id: string
@@ -26,6 +45,8 @@ let mockAuthState: MockAuthState = {
   ...DEFAULT_AUTH_STATE,
   user: { ...DEFAULT_AUTH_STATE.user },
 }
+
+let fullTournamentRequestCount = 0
 
 function successResponse<T>(data: T, status = 200) {
   return HttpResponse.json(
@@ -56,10 +77,15 @@ export function resetMockAuthState() {
     ...DEFAULT_AUTH_STATE,
     user: { ...DEFAULT_AUTH_STATE.user },
   }
+  fullTournamentRequestCount = 0
 }
 
 export function getMockAuthState() {
   return mockAuthState
+}
+
+export function getFullTournamentRequestCount() {
+  return fullTournamentRequestCount
 }
 
 export const handlers = [
@@ -123,5 +149,16 @@ export const handlers = [
     }
 
     return successResponse(true)
+  }),
+  http.get(`${API_BASE_URL}/tournaments/:tournamentId/full`, ({ request }) => {
+    const authorization = request.headers.get('authorization')
+
+    if (authorization !== `Bearer ${mockAuthState.accessToken}`) {
+      return errorResponse(['Unauthorized'], 401, 'Unauthorized')
+    }
+
+    fullTournamentRequestCount += 1
+
+    return successResponse(DEFAULT_TOURNAMENT_STATE)
   }),
 ]

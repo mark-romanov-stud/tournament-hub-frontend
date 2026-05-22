@@ -286,6 +286,113 @@
   border-radius: 8px;
 }
 
+.tournament-realtime-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  margin-bottom: 8px;
+  border: 1px solid #dbe4f0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbff, #eef4ff);
+}
+
+.tournament-realtime-panel-connected {
+  border-color: rgb(15 123 91 / 28%);
+  background: linear-gradient(135deg, #f0fdf8, #e8fff6);
+}
+
+.tournament-realtime-panel-connecting,
+.tournament-realtime-panel-recovering {
+  border-color: rgb(245 158 11 / 34%);
+  background: linear-gradient(135deg, #fffbeb, #fff7d6);
+}
+
+.tournament-realtime-panel-disconnected {
+  border-color: rgb(220 38 38 / 28%);
+  background: linear-gradient(135deg, #fff1f2, #fff7f7);
+}
+
+.tournament-realtime-panel-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.tournament-realtime-panel-eyebrow {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tournament-realtime-panel h3 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.tournament-realtime-panel-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: 900;
+  background: rgb(255 255 255 / 80%);
+  border-radius: 999px;
+  box-shadow: 0 8px 18px rgb(15 23 42 / 8%);
+}
+
+.tournament-realtime-panel-dot {
+  width: 9px;
+  height: 9px;
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.tournament-realtime-panel-connected .tournament-realtime-panel-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 5px rgb(16 185 129 / 16%);
+}
+
+.tournament-realtime-panel-connecting .tournament-realtime-panel-dot,
+.tournament-realtime-panel-recovering .tournament-realtime-panel-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 5px rgb(245 158 11 / 16%);
+}
+
+.tournament-realtime-panel-disconnected .tournament-realtime-panel-dot {
+  background: #dc2626;
+  box-shadow: 0 0 0 5px rgb(220 38 38 / 14%);
+}
+
+.tournament-realtime-panel-copy,
+.tournament-realtime-panel-event,
+.tournament-realtime-panel-recovery {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tournament-realtime-panel-event,
+.tournament-realtime-panel-recovery {
+  padding-top: 10px;
+  border-top: 1px solid rgb(15 23 42 / 8%);
+}
+
+.tournament-realtime-panel-recovery {
+  color: #0f7b5b;
+  font-weight: 800;
+}
+
 @media (width < 760px) {
   .create-tournament-page {
     padding-bottom: 96px;
