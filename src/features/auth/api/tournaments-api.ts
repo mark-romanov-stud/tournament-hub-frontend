@@ -18,6 +18,11 @@ export interface JoinTournamentInput {
   inviteToken?: string
 }
 
+export interface TournamentParticipant {
+  userId: string
+  cumulativeScore: number
+}
+
 export interface Tournament {
   id: string
   createdAt?: string
@@ -31,14 +36,33 @@ export interface Tournament {
   status: TournamentStatus
   inviteToken?: string | null
   ownerId: string
+  participants?: TournamentParticipant[]
 }
 
 function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisibility {
   return visibility === 'public' ? 'PUBLIC' : 'PRIVATE'
 }
 
+function unwrapTournamentList(response: {
+  data: Tournament[] | { items?: Tournament[] }
+}) {
+  if (Array.isArray(response.data)) {
+    return response.data
+  }
+
+  return response.data.items ?? []
+}
+
 export const tournamentsApi = authApi.injectEndpoints({
   endpoints: (builder) => ({
+    getTournaments: builder.query<Tournament[], void>({
+      query: () => ({
+        url: '/tournaments',
+        method: 'GET',
+      }),
+      transformResponse: unwrapTournamentList,
+    }),
+
     createTournament: builder.mutation<Tournament, CreateTournamentInput>({
       query: ({
         title,
@@ -74,9 +98,7 @@ export const tournamentsApi = authApi.injectEndpoints({
       query: ({ tournamentId, inviteToken }) => ({
         url: `/tournaments/${tournamentId}/join`,
         method: 'POST',
-        body: {
-          inviteToken,
-        },
+        body: inviteToken ? { inviteToken } : {},
       }),
       transformResponse: (response: { data: boolean }) => response.data,
     }),
@@ -86,5 +108,6 @@ export const tournamentsApi = authApi.injectEndpoints({
 export const {
   useCreateTournamentMutation,
   useGetTournamentQuery,
+  useGetTournamentsQuery,
   useJoinTournamentMutation,
 } = tournamentsApi

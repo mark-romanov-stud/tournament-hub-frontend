@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAppSelector } from '@/app/providers/store'
@@ -28,9 +27,6 @@ export function TournamentPage() {
   const navigate = useNavigate()
   const currentUser = useAppSelector((state) => state.auth.user)
 
-  const [joinError, setJoinError] = useState('')
-  const [hasJoined, setHasJoined] = useState(false)
-
   const {
     data: tournament,
     isLoading,
@@ -40,7 +36,8 @@ export function TournamentPage() {
     skip: !tournamentId,
   })
 
-  const [joinTournament, { isLoading: isJoining }] = useJoinTournamentMutation()
+  const [joinTournament, { isLoading: isJoining, error: joinError }] =
+    useJoinTournamentMutation()
 
   if (isLoading) {
     return <p>Loading tournament...</p>
@@ -50,24 +47,21 @@ export function TournamentPage() {
     return <p>Tournament not found.</p>
   }
 
+  const participants = tournament.participants ?? []
   const isOwner = currentUser?.id === tournament.ownerId
-  const canJoin = tournament.status === 'DRAFT' && !isOwner && !hasJoined
+  const isParticipant = participants.some(
+    (participant) => participant.userId === currentUser?.id,
+  )
+
+  const canJoin = tournament.status === 'DRAFT' && !isOwner && !isParticipant
 
   const handleJoin = async () => {
-    try {
-      setJoinError('')
+    const joinPayload = tournament.inviteToken
+      ? { tournamentId, inviteToken: tournament.inviteToken }
+      : { tournamentId }
 
-      const joinPayload = tournament.inviteToken
-        ? { tournamentId, inviteToken: tournament.inviteToken }
-        : { tournamentId }
-
-      await joinTournament(joinPayload).unwrap()
-
-      setHasJoined(true)
-      await refetch()
-    } catch (error) {
-      setJoinError(getApiErrorMessage(error))
-    }
+    await joinTournament(joinPayload).unwrap()
+    await refetch()
   }
 
   return (
@@ -82,7 +76,9 @@ export function TournamentPage() {
         </p>
 
         <div className="create-tournament-card">
-          {joinError ? <p className="form-error">{joinError}</p> : null}
+          {joinError ? (
+            <p className="form-error">{getApiErrorMessage(joinError)}</p>
+          ) : null}
 
           <p>
             <strong>Status:</strong> {tournament.status}
@@ -105,11 +101,7 @@ export function TournamentPage() {
             <strong>Vote duration:</strong> {tournament.voteDurationSeconds} seconds
           </p>
 
-          <p
-            style={{
-              wordBreak: 'break-word',
-            }}
-          >
+          <p style={{ wordBreak: 'break-word' }}>
             <strong>Tournament ID:</strong>
             <br />
             {tournament.id}
@@ -118,29 +110,35 @@ export function TournamentPage() {
           <div>
             <h3>Participants</h3>
 
-            <div
-              style={{
-                marginTop: '12px',
-                padding: '16px',
-                borderRadius: '16px',
-                background: '#eef3fb',
-              }}
-            >
-              <p style={{ margin: 0 }}>
-                <strong>Owner</strong>
-              </p>
-
-              <p
+            {participants.map((participant) => (
+              <div
+                key={participant.userId}
                 style={{
-                  margin: '8px 0 0',
-                  wordBreak: 'break-word',
+                  marginTop: '12px',
+                  padding: '16px',
+                  borderRadius: '16px',
+                  background: '#eef3fb',
                 }}
               >
-                {tournament.ownerId}
-              </p>
-            </div>
+                <p style={{ margin: 0 }}>
+                  <strong>
+                    {participant.userId === tournament.ownerId ? 'Owner' : 'Participant'}
+                    {participant.userId === currentUser?.id ? ' · You' : ''}
+                  </strong>
+                </p>
 
-            {hasJoined ? (
+                <p
+                  style={{
+                    margin: '8px 0 0',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {participant.userId}
+                </p>
+              </div>
+            ))}
+
+            {isParticipant && !isOwner ? (
               <div
                 style={{
                   marginTop: '12px',
