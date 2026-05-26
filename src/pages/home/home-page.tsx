@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { useAppDispatch, useAppSelector } from '@/app/providers/store'
 import { useLogoutMutation } from '@/features/auth/api/auth-api'
+import { useGetTournamentsQuery } from '@/features/auth/api/tournaments-api'
 import { authActions } from '@/features/auth/model/auth-slice'
 import { clearStoredSession } from '@/features/auth/model/token-storage'
 
@@ -10,6 +11,14 @@ export function HomePage() {
   const navigate = useNavigate()
   const [logout, { isLoading }] = useLogoutMutation()
   const user = useAppSelector((state) => state.auth.user)
+
+  const {
+    data: tournaments = [],
+    isLoading: isTournamentsLoading,
+    isError: isTournamentsError,
+  } = useGetTournamentsQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+  })
 
   const handleLogout = async () => {
     try {
@@ -78,6 +87,49 @@ export function HomePage() {
           >
             {isLoading ? 'Logging out...' : 'Log Out'}
           </button>
+        </div>
+
+        <div style={{ marginTop: '32px' }}>
+          <h2 style={{ marginBottom: '16px' }}>Tournaments</h2>
+
+          {isTournamentsLoading ? <p>Loading tournaments...</p> : null}
+
+          {isTournamentsError ? <p>Failed to load tournaments.</p> : null}
+
+          {!isTournamentsLoading && !isTournamentsError && tournaments.length === 0 ? (
+            <p>No tournaments yet.</p>
+          ) : null}
+
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {tournaments.map((tournament) => (
+              <div
+                key={tournament.id}
+                style={{
+                  padding: '16px',
+                  borderRadius: '16px',
+                  background: '#eef3fb',
+                }}
+              >
+                <strong>{tournament.title}</strong>
+
+                <p style={{ margin: '8px 0 12px' }}>Status: {tournament.status}</p>
+
+                <Link
+                  to={`/tournaments/${tournament.id}`}
+                  className="auth-button auth-button--primary"
+                  style={{
+                    minHeight: '44px',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  Open Tournament
+                </Link>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </main>
