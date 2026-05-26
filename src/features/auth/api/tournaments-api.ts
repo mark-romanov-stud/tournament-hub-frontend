@@ -2,6 +2,7 @@ import { authApi } from '@/features/auth/api/auth-api'
 
 export type TournamentVisibility = 'public' | 'private'
 export type ApiTournamentVisibility = 'PUBLIC' | 'PRIVATE'
+export type TournamentStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 
 export interface CreateTournamentInput {
   title: string
@@ -10,6 +11,11 @@ export interface CreateTournamentInput {
   roundsCount: number
   submissionDurationSeconds: number
   voteDurationSeconds: number
+}
+
+export interface JoinTournamentInput {
+  tournamentId: string
+  inviteToken?: string
 }
 
 export interface Tournament {
@@ -22,7 +28,7 @@ export interface Tournament {
   roundsCount: number
   submissionDurationSeconds: number
   voteDurationSeconds: number
-  status?: string
+  status: TournamentStatus
   inviteToken?: string | null
   ownerId: string
 }
@@ -63,7 +69,22 @@ export const tournamentsApi = authApi.injectEndpoints({
       }),
       transformResponse: (response: { data: Tournament }) => response.data,
     }),
+
+    joinTournament: builder.mutation<boolean, JoinTournamentInput>({
+      query: ({ tournamentId, inviteToken }) => ({
+        url: `/tournaments/${tournamentId}/join`,
+        method: 'POST',
+        body: {
+          inviteToken,
+        },
+      }),
+      transformResponse: (response: { data: boolean }) => response.data,
+    }),
   }),
 })
 
-export const { useCreateTournamentMutation, useGetTournamentQuery } = tournamentsApi
+export const {
+  useCreateTournamentMutation,
+  useGetTournamentQuery,
+  useJoinTournamentMutation,
+} = tournamentsApi
