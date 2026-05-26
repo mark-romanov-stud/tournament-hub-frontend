@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { useAppDispatch, useAppSelector } from '@/app/providers/store'
 import { useLogoutMutation } from '@/features/auth/api/auth-api'
@@ -27,7 +27,9 @@ export function HomePage() {
     <main className="dashboard-shell">
       <section className="dashboard-card">
         <p className="dashboard-card__eyebrow">Authenticated space</p>
+
         <h1>Curator Dashboard</h1>
+
         <p className="dashboard-card__copy">
           The private route is active. The authenticated shell is now reserved for
           signed-in curators only.
@@ -38,22 +40,45 @@ export function HomePage() {
             <dt>Username</dt>
             <dd>{user?.username ?? 'Unknown curator'}</dd>
           </div>
+
           <div>
             <dt>Email</dt>
             <dd>{user?.email ?? 'Unknown email'}</dd>
           </div>
         </dl>
 
-        <button
-          className="auth-button auth-button--primary dashboard-card__action"
-          disabled={isLoading}
-          type="button"
-          onClick={() => {
-            void handleLogout()
+        <div
+          style={{
+            display: 'flex',
+            gap: '16px',
+            marginTop: '24px',
+            flexWrap: 'wrap',
           }}
         >
-          {isLoading ? 'Logging out...' : 'Log Out'}
-        </button>
+          <Link
+            to="/tournaments/create"
+            className="auth-button auth-button--primary dashboard-card__action"
+            style={{
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            Create Tournament
+          </Link>
+
+          <button
+            className="auth-button auth-button--primary dashboard-card__action"
+            disabled={isLoading}
+            type="button"
+            onClick={() => {
+              void handleLogout()
+            }}
+          >
+            {isLoading ? 'Logging out...' : 'Log Out'}
+          </button>
+        </div>
       </section>
     </main>
   )

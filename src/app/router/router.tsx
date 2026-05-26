@@ -4,6 +4,8 @@ import { GuestRoute, ProtectedRoute } from '@/features/auth/ui/route-guards'
 import { LoginPage } from '@/pages/auth/login-page'
 import { RegisterPage } from '@/pages/auth/register-page'
 import { HomePage } from '@/pages/home/home-page'
+import { CreateTournamentPage } from '@/pages/tournaments/create-tournament-page'
+import { TournamentPage } from '@/pages/tournaments/tournament-page'
 
 const routes = [
   {
@@ -11,6 +13,22 @@ const routes = [
     element: (
       <ProtectedRoute>
         <HomePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/tournaments/create',
+    element: (
+      <ProtectedRoute>
+        <CreateTournamentPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/tournaments/:tournamentId',
+    element: (
+      <ProtectedRoute>
+        <TournamentPage />
       </ProtectedRoute>
     ),
   },
