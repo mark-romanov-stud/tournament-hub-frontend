@@ -27,6 +27,37 @@ export interface Tournament {
   ownerId: string
 }
 
+export interface FullTournamentParticipant {
+  userId: string
+  cumulativeScore: number
+}
+
+export interface FullTournament {
+  id: string
+  title: string
+  description: string | null
+  visibility: ApiTournamentVisibility
+  status: string
+  roundsCount: number
+  submissionDurationSeconds: number
+  voteDurationSeconds: number
+  ownerId: string
+  participants: FullTournamentParticipant[]
+  currentRound: {
+    id: string
+    number: number
+    phase: string
+    prompt: {
+      key: string
+      type: string
+      content: string
+    }
+    submissionDeadline: string
+    submissionClosedAt: string | null
+    votingDeadline: string | null
+  } | null
+}
+
 function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisibility {
   return visibility === 'public' ? 'PUBLIC' : 'PRIVATE'
 }
@@ -56,14 +87,18 @@ export const tournamentsApi = authApi.injectEndpoints({
       transformResponse: (response: { data: Tournament }) => response.data,
     }),
 
-    getTournament: builder.query<Tournament, string>({
+    getFullTournament: builder.query<FullTournament, string>({
       query: (id) => ({
-        url: `/tournaments/${id}`,
+        url: `/tournaments/${id}/full`,
         method: 'GET',
       }),
-      transformResponse: (response: { data: Tournament }) => response.data,
+      transformResponse: (response: { data: FullTournament }) => response.data,
     }),
   }),
 })
 
-export const { useCreateTournamentMutation, useGetTournamentQuery } = tournamentsApi
+export const {
+  useCreateTournamentMutation,
+  useGetFullTournamentQuery,
+  useLazyGetFullTournamentQuery,
+} = tournamentsApi
