@@ -2,6 +2,7 @@ import { authApi } from '@/features/auth/api/auth-api'
 
 export type TournamentVisibility = 'public' | 'private'
 export type ApiTournamentVisibility = 'PUBLIC' | 'PRIVATE'
+export type TournamentStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 
 export interface TournamentParticipant {
   userId: string
@@ -17,6 +18,11 @@ export interface CreateTournamentInput {
   voteDurationSeconds: number
 }
 
+export interface JoinTournamentInput {
+  tournamentId: string
+  inviteToken?: string
+}
+
 export interface Tournament {
   id: string
   createdAt?: string
@@ -27,7 +33,7 @@ export interface Tournament {
   roundsCount: number
   submissionDurationSeconds: number
   voteDurationSeconds: number
-  status?: string
+  status: TournamentStatus
   inviteToken?: string | null
   ownerId: string
   participants?: TournamentParticipant[]
@@ -37,8 +43,26 @@ function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisi
   return visibility === 'public' ? 'PUBLIC' : 'PRIVATE'
 }
 
+function unwrapTournamentList(response: {
+  data: Tournament[] | { items?: Tournament[] }
+}) {
+  if (Array.isArray(response.data)) {
+    return response.data
+  }
+
+  return response.data.items ?? []
+}
+
 export const tournamentsApi = authApi.injectEndpoints({
   endpoints: (builder) => ({
+    getTournaments: builder.query<Tournament[], void>({
+      query: () => ({
+        url: '/tournaments',
+        method: 'GET',
+      }),
+      transformResponse: unwrapTournamentList,
+    }),
+
     createTournament: builder.mutation<Tournament, CreateTournamentInput>({
       query: ({
         title,
@@ -69,7 +93,21 @@ export const tournamentsApi = authApi.injectEndpoints({
       }),
       transformResponse: (response: { data: Tournament }) => response.data,
     }),
+
+    joinTournament: builder.mutation<boolean, JoinTournamentInput>({
+      query: ({ tournamentId, inviteToken }) => ({
+        url: `/tournaments/${tournamentId}/join`,
+        method: 'POST',
+        body: inviteToken ? { inviteToken } : {},
+      }),
+      transformResponse: (response: { data: boolean }) => response.data,
+    }),
   }),
 })
 
-export const { useCreateTournamentMutation, useGetTournamentQuery } = tournamentsApi
+export const {
+  useCreateTournamentMutation,
+  useGetTournamentQuery,
+  useGetTournamentsQuery,
+  useJoinTournamentMutation,
+} = tournamentsApi
