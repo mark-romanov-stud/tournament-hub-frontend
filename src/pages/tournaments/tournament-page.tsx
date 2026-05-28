@@ -25,6 +25,8 @@ interface PresenceUpdatedPayload {
   occurredAt: string
 }
 
+type RealtimeStatus = 'idle' | 'connected' | 'failed' | 'room-error'
+
 const getApiErrorMessage = (error: unknown) => {
   if (typeof error === 'object' && error !== null && 'data' in error) {
     const data = (error as { data?: { message?: string[] | string } }).data
@@ -47,10 +49,10 @@ export function TournamentPage() {
   const currentUser = useAppSelector((state) => state.auth.user)
 
   const [realtimeParticipants, setRealtimeParticipants] = useState<
-    TournamentParticipant[]
-  >([])
+    TournamentParticipant[] | null
+  >(null)
   const [activeCount, setActiveCount] = useState(0)
-  const [realtimeStatus, setRealtimeStatus] = useState('Connecting...')
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('idle')
 
   const {
     data: tournament,
@@ -65,34 +67,58 @@ export function TournamentPage() {
     useJoinTournamentMutation()
 
   const displayedParticipants = useMemo(() => {
-    return realtimeParticipants.length > 0
-      ? realtimeParticipants
-      : (tournament?.participants ?? [])
+    return realtimeParticipants ?? tournament?.participants ?? []
   }, [realtimeParticipants, tournament?.participants])
 
+  const isOwner = currentUser?.id === tournament?.ownerId
+  const isParticipant = displayedParticipants.some(
+    (participant) => participant.userId === currentUser?.id,
+  )
+  const canAccessRealtimeRoom = Boolean(tournamentId && (isOwner || isParticipant))
+
+  const realtimeStatusLabel = useMemo(() => {
+    if (!canAccessRealtimeRoom) {
+      return 'Waiting for lobby access'
+    }
+
+    if (realtimeStatus === 'connected') {
+      return 'Connected'
+    }
+
+    if (realtimeStatus === 'failed') {
+      return 'Realtime connection failed'
+    }
+
+    if (realtimeStatus === 'room-error') {
+      return 'Unable to join realtime room'
+    }
+
+    return 'Connecting...'
+  }, [canAccessRealtimeRoom, realtimeStatus])
+
   useEffect(() => {
-    if (!tournamentId) {
+    if (!tournamentId || !canAccessRealtimeRoom) {
       return
     }
 
     const socket = createTournamentSocket()
 
     socket.on('connect', () => {
-      setRealtimeStatus('Connected')
+      setRealtimeStatus('connected')
 
       socket.emit(
         TournamentClientEvent.JOIN,
         { tournamentId },
         (ack?: { success?: boolean }) => {
           if (!ack?.success) {
-            setRealtimeStatus('Unable to join realtime room')
+            setRealtimeStatus('room-error')
           }
         },
       )
     })
 
     socket.on('connect_error', () => {
-      setRealtimeStatus('Realtime connection failed')
+      setRealtimeStatus('failed')
     })
 
     socket.on(
@@ -103,16 +129,18 @@ export function TournamentPage() {
         }
 
         setRealtimeParticipants((currentParticipants) => {
-          const isAlreadyInList = currentParticipants.some(
+          const baseParticipants = currentParticipants ?? tournament?.participants ?? []
+
+          const isAlreadyInList = baseParticipants.some(
             (participant) => participant.userId === payload.userId,
           )
 
           if (isAlreadyInList) {
-            return currentParticipants
+            return baseParticipants
           }
 
           return [
-            ...currentParticipants,
+            ...baseParticipants,
             {
               userId: payload.userId,
               cumulativeScore: 0,
@@ -129,11 +157,13 @@ export function TournamentPage() {
           return
         }
 
-        setRealtimeParticipants((currentParticipants) =>
-          currentParticipants.filter(
+        setRealtimeParticipants((currentParticipants) => {
+          const baseParticipants = currentParticipants ?? tournament?.participants ?? []
+
+          return baseParticipants.filter(
             (participant) => participant.userId !== payload.userId,
-          ),
-        )
+          )
+        })
       },
     )
 
@@ -149,10 +179,13 @@ export function TournamentPage() {
     )
 
     return () => {
-      socket.emit(TournamentClientEvent.LEAVE, { tournamentId })
+      if (socket.connected) {
+        socket.emit(TournamentClientEvent.LEAVE, { tournamentId })
+      }
+
       socket.disconnect()
     }
-  }, [tournamentId])
+  }, [canAccessRealtimeRoom, tournament?.participants, tournamentId])
 
   if (isLoading) {
     return <p>Loading tournament...</p>
@@ -162,10 +195,6 @@ export function TournamentPage() {
     return <p>Tournament not found.</p>
   }
 
-  const isOwner = currentUser?.id === tournament.ownerId
-  const isParticipant = displayedParticipants.some(
-    (participant) => participant.userId === currentUser?.id,
-  )
   const canJoin = tournament.status === 'DRAFT' && !isOwner && !isParticipant
 
   const handleJoin = async () => {
@@ -215,11 +244,11 @@ export function TournamentPage() {
           </p>
 
           <p>
-            <strong>Realtime:</strong> {realtimeStatus}
+            <strong>Realtime:</strong> {realtimeStatusLabel}
           </p>
 
           <p>
-            <strong>Active users:</strong> {activeCount}
+            <strong>Active users:</strong> {canAccessRealtimeRoom ? activeCount : 0}
           </p>
 
           <p style={{ wordBreak: 'break-word' }}>

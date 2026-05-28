@@ -13,18 +13,29 @@ export const TournamentServerEvent = {
   PRESENCE_UPDATED: 'tournament:presence_updated',
 } as const
 
-function resolveSocketUrl() {
-  const configuredApiUrl = import.meta.env.VITE_API_URL
+interface ImportMetaEnv {
+  readonly VITE_API_URL?: string
+  readonly VITE_SOCKET_URL?: string
+}
 
-  if (!configuredApiUrl) {
+const getEnv = () => import.meta.env as ImportMetaEnv
+
+function resolveSocketUrl(): string {
+  const { VITE_API_URL, VITE_SOCKET_URL } = getEnv()
+
+  if (VITE_SOCKET_URL) {
+    return VITE_SOCKET_URL
+  }
+
+  if (!VITE_API_URL) {
     return 'https://tournament-hub-backend.onrender.com'
   }
 
-  if (/^https?:\/\//.test(configuredApiUrl)) {
-    return configuredApiUrl.replace(/\/api\/v1\/?$/, '')
+  if (/^https?:\/\//.test(VITE_API_URL)) {
+    return VITE_API_URL.replace(/\/api\/v1\/?$/, '')
   }
 
-  return window.location.origin
+  return 'http://localhost:3000'
 }
 
 export function createTournamentSocket(): Socket {
