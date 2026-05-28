@@ -3,6 +3,11 @@ import { authApi } from '@/features/auth/api/auth-api'
 export type TournamentVisibility = 'public' | 'private'
 export type ApiTournamentVisibility = 'PUBLIC' | 'PRIVATE'
 
+export interface TournamentParticipant {
+  userId: string
+  cumulativeScore: number
+}
+
 export interface CreateTournamentInput {
   title: string
   description: string
@@ -25,6 +30,7 @@ export interface Tournament {
   status?: string
   inviteToken?: string | null
   ownerId: string
+  participants?: TournamentParticipant[]
 }
 
 function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisibility {
