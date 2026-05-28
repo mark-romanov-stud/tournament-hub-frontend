@@ -2,9 +2,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAppSelector } from '@/app/providers/store'
 import {
-  useGetTournamentQuery,
+  useGetFullTournamentQuery,
   useJoinTournamentMutation,
 } from '@/features/auth/api/tournaments-api'
+import type { TournamentRealtimeEvent } from '@/features/tournaments/realtime/tournament-realtime'
+import type { TournamentConnectionStatus } from '@/features/tournaments/realtime/use-tournament-realtime'
+import { useTournamentRealtime } from '@/features/tournaments/realtime/use-tournament-realtime'
 
 const getApiErrorMessage = (error: unknown) => {
   if (typeof error === 'object' && error !== null && 'data' in error) {
@@ -22,6 +25,98 @@ const getApiErrorMessage = (error: unknown) => {
   return 'Failed to join tournament. Please try again.'
 }
 
+const realtimeStatusCopy: Record<
+  TournamentConnectionStatus,
+  { label: string; tone: string; title: string; description: string }
+> = {
+  connected: {
+    label: 'Connected',
+    tone: 'connected',
+    title: 'Live room connected',
+    description: 'You are subscribed to realtime tournament updates.',
+  },
+  connecting: {
+    label: 'Reconnecting',
+    tone: 'connecting',
+    title: 'Trying to reconnect',
+    description: 'The client is restoring the socket connection.',
+  },
+  disconnected: {
+    label: 'Disconnected',
+    tone: 'disconnected',
+    title: 'Connection lost',
+    description: 'Realtime updates are paused until the socket reconnects.',
+  },
+  idle: {
+    label: 'Waiting',
+    tone: 'idle',
+    title: 'Realtime is preparing',
+    description: 'The tournament room subscription has not started yet.',
+  },
+  recovering: {
+    label: 'Recovering',
+    tone: 'recovering',
+    title: 'Reconnected, restoring state',
+    description: 'The room is joined again and tournament state is being refreshed.',
+  },
+}
+
+function TournamentRealtimePanel({
+  connectionStatus,
+  lastEvent,
+  lastRecoveredAt,
+}: {
+  connectionStatus: TournamentConnectionStatus
+  lastEvent: TournamentRealtimeEvent | null
+  lastRecoveredAt: string | null
+}) {
+  const status = realtimeStatusCopy[connectionStatus]
+
+  return (
+    <section
+      className={`tournament-realtime-panel tournament-realtime-panel-${status.tone}`}
+      aria-live="polite"
+    >
+      <div className="tournament-realtime-panel-header">
+        <div>
+          <p className="tournament-realtime-panel-eyebrow">Realtime room</p>
+          <h3>{status.title}</h3>
+        </div>
+
+        <span
+          className="tournament-realtime-panel-badge"
+          data-testid="tournament-realtime-status"
+        >
+          <span className="tournament-realtime-panel-dot" />
+          {status.label}
+        </span>
+      </div>
+
+      <p className="tournament-realtime-panel-copy">{status.description}</p>
+
+      {lastRecoveredAt ? (
+        <p
+          className="tournament-realtime-panel-recovery"
+          data-testid="tournament-recovery-note"
+        >
+          State recovered after reconnect at {lastRecoveredAt}
+        </p>
+      ) : null}
+
+      {lastEvent ? (
+        <p
+          className="tournament-realtime-panel-event"
+          data-testid="tournament-latest-event"
+        >
+          Latest event: <strong>{lastEvent.name}</strong>
+        </p>
+      ) : (
+        <p className="tournament-realtime-panel-event">Waiting for first event…</p>
+      )}
+    </section>
+  )
+}
+
 export function TournamentPage() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
@@ -32,12 +127,15 @@ export function TournamentPage() {
     isLoading,
     isError,
     refetch,
-  } = useGetTournamentQuery(tournamentId ?? '', {
+  } = useGetFullTournamentQuery(tournamentId ?? '', {
     skip: !tournamentId,
   })
 
   const [joinTournament, { isLoading: isJoining, error: joinError }] =
     useJoinTournamentMutation()
+
+  const { connectionStatus, lastEvent, lastRecoveredAt } =
+    useTournamentRealtime(tournamentId)
 
   if (isLoading) {
     return <p>Loading tournament...</p>
@@ -52,7 +150,6 @@ export function TournamentPage() {
   const isParticipant = participants.some(
     (participant) => participant.userId === currentUser?.id,
   )
-
   const canJoin = tournament.status === 'DRAFT' && !isOwner && !isParticipant
 
   const handleJoin = async () => {
@@ -80,6 +177,12 @@ export function TournamentPage() {
             <p className="form-error">{getApiErrorMessage(joinError)}</p>
           ) : null}
 
+          <TournamentRealtimePanel
+            connectionStatus={connectionStatus}
+            lastEvent={lastEvent}
+            lastRecoveredAt={lastRecoveredAt}
+          />
+
           <p>
             <strong>Status:</strong> {tournament.status}
           </p>
@@ -93,8 +196,8 @@ export function TournamentPage() {
           </p>
 
           <p>
-            <strong>Submission duration:</strong> {tournament.submissionDurationSeconds}{' '}
-            seconds
+            <strong>Submission duration:</strong>{' '}
+            {tournament.submissionDurationSeconds} seconds
           </p>
 
           <p>
@@ -109,6 +212,8 @@ export function TournamentPage() {
 
           <div>
             <h3>Participants</h3>
+
+            {participants.length === 0 ? <p>No participants yet.</p> : null}
 
             {participants.map((participant) => (
               <div
@@ -135,23 +240,12 @@ export function TournamentPage() {
                 >
                   {participant.userId}
                 </p>
-              </div>
-            ))}
 
-            {isParticipant && !isOwner ? (
-              <div
-                style={{
-                  marginTop: '12px',
-                  padding: '16px',
-                  borderRadius: '16px',
-                  background: '#eef3fb',
-                }}
-              >
-                <p style={{ margin: 0 }}>
-                  <strong>You joined this tournament</strong>
+                <p style={{ margin: '8px 0 0' }}>
+                  Score: {participant.cumulativeScore}
                 </p>
               </div>
-            ) : null}
+            ))}
           </div>
 
           {canJoin ? (

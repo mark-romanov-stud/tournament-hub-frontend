@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3001'
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -15,7 +17,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/v1': {
-        target: 'http://localhost:3000',
+        target: apiProxyTarget,
         changeOrigin: true,
         secure: false,
       },
