@@ -1,9 +1,86 @@
+import { type FormEvent, useEffect, useMemo, useReducer, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { useGetFullTournamentQuery } from '@/features/auth/api/tournaments-api'
+import {
+  type FullTournament,
+  type RoundPromptContent,
+  useGetFullTournamentQuery,
+  useUpsertRoundSubmissionMutation,
+} from '@/features/auth/api/tournaments-api'
 import type { TournamentRealtimeEvent } from '@/features/tournaments/realtime/tournament-realtime'
 import type { TournamentConnectionStatus } from '@/features/tournaments/realtime/use-tournament-realtime'
 import { useTournamentRealtime } from '@/features/tournaments/realtime/use-tournament-realtime'
+
+interface SubmissionProgress {
+  roundId: string
+  submittedCount: number
+  totalActiveParticipants: number
+}
+
+interface TournamentRoundViewState {
+  createdRound: FullTournament['currentRound']
+  phaseOverride: {
+    roundId: string
+    phase: 'VOTING'
+    submissionClosedAt: string
+  } | null
+  progress: SubmissionProgress | null
+}
+
+type TournamentRoundViewAction =
+  | {
+      type: 'roundCreated'
+      round: NonNullable<FullTournament['currentRound']>
+      totalActiveParticipants: number
+    }
+  | { type: 'progressUpdated'; progress: SubmissionProgress }
+  | {
+      type: 'phaseChanged'
+      roundId: string
+      phase: 'VOTING'
+      submissionClosedAt: string
+    }
+
+const initialTournamentRoundViewState: TournamentRoundViewState = {
+  createdRound: null,
+  phaseOverride: null,
+  progress: null,
+}
+
+interface RoundCreatedPayload {
+  tournamentId: string
+  roundId: string
+  roundNumber: number
+  phase: 'SUBMISSION'
+  prompt: {
+    key: string
+    type: string
+    content: RoundPromptContent
+  }
+  submissionDeadline: string
+}
+
+interface RoundProgressPayload {
+  tournamentId: string
+  roundId: string
+  phase: 'SUBMISSION'
+  submittedCount: number
+  totalActiveParticipants: number
+}
+
+interface RoundPhaseChangedPayload {
+  tournamentId: string
+  roundId: string
+  roundNumber: number
+  currentPhase: 'VOTING'
+  occurredAt?: string
+}
+
+interface VotingSubmissionRevealedPayload {
+  tournamentId: string
+  roundId: string
+  votingDeadline: string
+}
 
 const realtimeStatusCopy: Record<
   TournamentConnectionStatus,
@@ -97,6 +174,385 @@ function TournamentRealtimePanel({
   )
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function tournamentRoundViewReducer(
+  state: TournamentRoundViewState,
+  action: TournamentRoundViewAction,
+): TournamentRoundViewState {
+  switch (action.type) {
+    case 'roundCreated':
+      return {
+        createdRound: action.round,
+        phaseOverride: null,
+        progress: {
+          roundId: action.round.id,
+          submittedCount: 0,
+          totalActiveParticipants: action.totalActiveParticipants,
+        },
+      }
+    case 'progressUpdated':
+      return {
+        ...state,
+        progress: action.progress,
+      }
+    case 'phaseChanged':
+      return {
+        ...state,
+        phaseOverride: {
+          roundId: action.roundId,
+          phase: action.phase,
+          submissionClosedAt: action.submissionClosedAt,
+        },
+      }
+  }
+}
+
+function isRoundCreatedPayload(payload: unknown): payload is RoundCreatedPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    typeof payload.roundNumber === 'number' &&
+    payload.phase === 'SUBMISSION' &&
+    isRecord(payload.prompt) &&
+    typeof payload.prompt.key === 'string' &&
+    typeof payload.prompt.type === 'string' &&
+    typeof payload.submissionDeadline === 'string'
+  )
+}
+
+function isRoundProgressPayload(payload: unknown): payload is RoundProgressPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    payload.phase === 'SUBMISSION' &&
+    typeof payload.submittedCount === 'number' &&
+    typeof payload.totalActiveParticipants === 'number'
+  )
+}
+
+function isRoundPhaseChangedPayload(
+  payload: unknown,
+): payload is RoundPhaseChangedPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    typeof payload.roundNumber === 'number' &&
+    payload.currentPhase === 'VOTING'
+  )
+}
+
+function isVotingSubmissionRevealedPayload(
+  payload: unknown,
+): payload is VotingSubmissionRevealedPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    typeof payload.votingDeadline === 'string'
+  )
+}
+
+function getPromptText(content: RoundPromptContent) {
+  return typeof content === 'string' ? content : content.en
+}
+
+function formatDeadline(deadline: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(deadline))
+}
+
+function getRemainingSeconds(deadline: string) {
+  return Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000))
+}
+
+function useRemainingSeconds(deadline: string | null) {
+  const [remainingSeconds, setRemainingSeconds] = useState(() =>
+    deadline ? getRemainingSeconds(deadline) : 0,
+  )
+
+  useEffect(() => {
+    if (!deadline) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setRemainingSeconds(getRemainingSeconds(deadline))
+    }, 1000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [deadline])
+
+  return remainingSeconds
+}
+
+function TournamentRoundPhasePanel({
+  tournament,
+  lastEvent,
+}: {
+  tournament: FullTournament
+  lastEvent: TournamentRealtimeEvent | null
+}) {
+  const [viewState, dispatch] = useReducer(
+    tournamentRoundViewReducer,
+    initialTournamentRoundViewState,
+  )
+
+  useEffect(() => {
+    if (!lastEvent) {
+      return
+    }
+
+    if (lastEvent.name === 'round:created') {
+      const payload = lastEvent.payload
+
+      if (isRoundCreatedPayload(payload) && payload.tournamentId === tournament.id) {
+        dispatch({
+          type: 'roundCreated',
+          round: {
+            id: payload.roundId,
+            number: payload.roundNumber,
+            phase: payload.phase,
+            prompt: payload.prompt,
+            submissionDeadline: payload.submissionDeadline,
+            submissionClosedAt: null,
+            votingDeadline: null,
+          },
+          totalActiveParticipants: tournament.participants.length,
+        })
+      }
+
+      return
+    }
+
+    if (lastEvent.name === 'round:progress_updated') {
+      const payload = lastEvent.payload
+
+      if (isRoundProgressPayload(payload) && payload.tournamentId === tournament.id) {
+        dispatch({
+          type: 'progressUpdated',
+          progress: {
+            roundId: payload.roundId,
+            submittedCount: payload.submittedCount,
+            totalActiveParticipants: payload.totalActiveParticipants,
+          },
+        })
+      }
+
+      return
+    }
+
+    if (lastEvent.name === 'round:phase_changed') {
+      const payload = lastEvent.payload
+
+      if (isRoundPhaseChangedPayload(payload) && payload.tournamentId === tournament.id) {
+        dispatch({
+          type: 'phaseChanged',
+          roundId: payload.roundId,
+          phase: payload.currentPhase,
+          submissionClosedAt: payload.occurredAt ?? new Date().toISOString(),
+        })
+      }
+    }
+
+    if (lastEvent.name === 'voting:submission_revealed') {
+      const payload = lastEvent.payload
+
+      if (
+        isVotingSubmissionRevealedPayload(payload) &&
+        payload.tournamentId === tournament.id
+      ) {
+        dispatch({
+          type: 'phaseChanged',
+          roundId: payload.roundId,
+          phase: 'VOTING',
+          submissionClosedAt: new Date().toISOString(),
+        })
+      }
+    }
+  }, [lastEvent, tournament.id, tournament.participants.length])
+
+  let currentRound = viewState.createdRound ?? tournament.currentRound
+
+  if (currentRound && viewState.phaseOverride?.roundId === currentRound.id) {
+    currentRound = {
+      ...currentRound,
+      phase: viewState.phaseOverride.phase,
+      submissionClosedAt: viewState.phaseOverride.submissionClosedAt,
+    }
+  }
+
+  if (lastEvent?.name === 'round:phase_changed') {
+    const payload = lastEvent.payload
+    if (
+      currentRound &&
+      isRoundPhaseChangedPayload(payload) &&
+      payload.tournamentId === tournament.id &&
+      payload.roundId === currentRound.id
+    ) {
+      currentRound = {
+        ...currentRound,
+        phase: payload.currentPhase,
+        submissionClosedAt: payload.occurredAt ?? new Date().toISOString(),
+      }
+    }
+  }
+
+  if (!currentRound) {
+    return (
+      <section className="tournament-phase-panel">
+        <h3>Waiting for Round</h3>
+        <p>The tournament has not started an active round yet.</p>
+      </section>
+    )
+  }
+
+  if (currentRound.phase === 'SUBMISSION') {
+    return (
+      <SubmissionPhasePanel
+        participantCount={tournament.participants.length}
+        progress={viewState.progress}
+        round={currentRound}
+      />
+    )
+  }
+
+  return (
+    <section className="tournament-phase-panel" aria-live="polite">
+      <p className="tournament-phase-eyebrow">Active round</p>
+      <h3>Round {currentRound.number} Voting</h3>
+      <p>
+        The submission phase has ended. Responses will be revealed one at a time for
+        voting.
+      </p>
+    </section>
+  )
+}
+
+function SubmissionPhasePanel({
+  participantCount,
+  progress,
+  round,
+}: {
+  participantCount: number
+  progress: SubmissionProgress | null
+  round: NonNullable<FullTournament['currentRound']>
+}) {
+  const [content, setContent] = useState('')
+  const [isSaved, setIsSaved] = useState(false)
+  const [upsertSubmission, { isLoading, isError }] = useUpsertRoundSubmissionMutation()
+  const remainingSeconds = useRemainingSeconds(round.submissionDeadline)
+  const submittedCount = progress?.roundId === round.id ? progress.submittedCount : 0
+  const totalParticipants =
+    progress?.roundId === round.id ? progress.totalActiveParticipants : participantCount
+  const progressPercent = useMemo(() => {
+    if (totalParticipants <= 0) {
+      return 0
+    }
+
+    return Math.min(100, Math.round((submittedCount / totalParticipants) * 100))
+  }, [submittedCount, totalParticipants])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!content.trim()) {
+      return
+    }
+
+    await upsertSubmission({
+      roundId: round.id,
+      content: content.trim(),
+    }).unwrap()
+    setIsSaved(true)
+  }
+
+  return (
+    <section className="tournament-phase-panel" aria-live="polite">
+      <div className="tournament-phase-header">
+        <div>
+          <p className="tournament-phase-eyebrow">Active round</p>
+          <h3>Round {round.number} Submission</h3>
+        </div>
+        <span className="tournament-phase-badge" data-testid="submission-countdown">
+          {remainingSeconds} seconds remaining
+        </span>
+      </div>
+
+      <div className="tournament-prompt">
+        <p className="tournament-prompt-label">Prompt</p>
+        <p>{getPromptText(round.prompt.content)}</p>
+        <span className="tournament-prompt-deadline">
+          Deadline: {formatDeadline(round.submissionDeadline)}
+        </span>
+      </div>
+
+      <div className="submission-progress" data-testid="submission-progress">
+        <div className="submission-progress-copy">
+          <strong>
+            {submittedCount} of {totalParticipants} submitted
+          </strong>
+          <span className="submission-progress-note">
+            Submissions are hidden until voting starts.
+          </span>
+        </div>
+        <div
+          className="submission-progress-track"
+          role="progressbar"
+          aria-label="Submission progress"
+          aria-valuemin={0}
+          aria-valuemax={totalParticipants}
+          aria-valuenow={submittedCount}
+        >
+          <span
+            className="submission-progress-fill"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      <form
+        className="submission-form"
+        onSubmit={(event) => {
+          void handleSubmit(event)
+        }}
+      >
+        <label htmlFor="round-submission">Your submission</label>
+        <textarea
+          className="submission-form-textarea"
+          id="round-submission"
+          maxLength={4000}
+          value={content}
+          onChange={(event) => {
+            setContent(event.target.value)
+            setIsSaved(false)
+          }}
+          placeholder="Write your response before the timer ends."
+        />
+
+        {isError ? (
+          <p className="form-error">Could not save submission. Try again.</p>
+        ) : null}
+        {isSaved ? <p className="submission-saved">Submission saved.</p> : null}
+
+        <button className="create-button" type="submit" disabled={isLoading}>
+          {isLoading ? 'Submitting...' : 'Submit Response'}
+        </button>
+      </form>
+    </section>
+  )
+}
+
 export function TournamentPage() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
@@ -138,6 +594,12 @@ export function TournamentPage() {
             connectionStatus={connectionStatus}
             lastEvent={lastEvent}
             lastRecoveredAt={lastRecoveredAt}
+          />
+
+          <TournamentRoundPhasePanel
+            key={`${tournament.id}-${tournament.currentRound?.id ?? 'waiting'}`}
+            tournament={tournament}
+            lastEvent={lastEvent}
           />
 
           <p
