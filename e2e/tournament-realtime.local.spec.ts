@@ -1,4 +1,11 @@
-import { expect, type Page, request, type TestInfo, test } from '@playwright/test'
+import {
+  expect,
+  type Locator,
+  type Page,
+  request,
+  type TestInfo,
+  test,
+} from '@playwright/test'
 
 const backendOrigin = process.env.E2E_BACKEND_ORIGIN ?? 'http://127.0.0.1:3001'
 
@@ -40,6 +47,20 @@ async function attachScreenshot(page: Page, testInfo: TestInfo, name: string) {
   })
 }
 
+async function expectVisualSnapshot(page: Page, name: string, mask: Locator[] = []) {
+  await page.locator('[data-e2e-stage-marker]').evaluateAll((elements) => {
+    for (const element of elements) {
+      element.remove()
+    }
+  })
+
+  await expect(page).toHaveScreenshot(`${name}.png`, {
+    animations: 'disabled',
+    fullPage: true,
+    mask,
+  })
+}
+
 test.describe('local backend tournament realtime flow', () => {
   test.beforeAll(async () => {
     const api = await request.newContext()
@@ -77,21 +98,27 @@ test.describe('local backend tournament realtime flow', () => {
 
     await page.goto('/register')
     await attachScreenshot(page, testInfo, '01-register-page')
+    await expectVisualSnapshot(page, '01-register-page')
 
     await page.getByLabel('Username').fill(username)
     await page.getByLabel('Email Address').fill(email)
     await page.locator('input[name="password"]').fill(password)
     await attachScreenshot(page, testInfo, '02-register-filled')
+    await expectVisualSnapshot(page, '02-register-filled', [page.locator('input')])
     await page.getByRole('button', { name: /register account/i }).click()
 
     await expect(page.getByRole('heading', { name: /curator dashboard/i })).toBeVisible()
     await attachScreenshot(page, testInfo, '03-dashboard-after-registration')
+    await expectVisualSnapshot(page, '03-dashboard-after-registration', [
+      page.locator('.dashboard-card__meta'),
+    ])
 
     await page.goto('/tournaments/create')
     await expect(
       page.getByRole('heading', { name: /initialize your competition/i }),
     ).toBeVisible()
     await attachScreenshot(page, testInfo, '04-create-tournament-empty')
+    await expectVisualSnapshot(page, '04-create-tournament-empty')
     await page.getByLabel('Tournament Name').fill(title)
     await page
       .getByLabel('Description')
@@ -104,6 +131,9 @@ test.describe('local backend tournament realtime flow', () => {
       'Playwright local backend realtime smoke test.',
     )
     await attachScreenshot(page, testInfo, '05-create-tournament-filled')
+    await expectVisualSnapshot(page, '05-create-tournament-filled', [
+      page.getByLabel('Tournament Name'),
+    ])
 
     await Promise.all([
       page.waitForURL(/\/tournaments\/[0-9a-f-]+$/u),
@@ -121,12 +151,20 @@ test.describe('local backend tournament realtime flow', () => {
     )
     await expect.poll(() => fullTournamentRequestCount).toBeGreaterThanOrEqual(1)
     await attachScreenshot(page, testInfo, '06-tournament-connected')
+    await expect(page.locator('.tournament-realtime-panel')).toHaveScreenshot(
+      '06-realtime-connected-panel.png',
+      { animations: 'disabled' },
+    )
 
     await context.setOffline(true)
     await expect(page.getByTestId('tournament-realtime-status')).toContainText(
       'Disconnected',
     )
     await attachScreenshot(page, testInfo, '07-tournament-disconnected')
+    await expect(page.locator('.tournament-realtime-panel')).toHaveScreenshot(
+      '07-realtime-disconnected-panel.png',
+      { animations: 'disabled' },
+    )
 
     await context.setOffline(false)
     await expect(page.getByTestId('tournament-realtime-status')).toContainText(
@@ -137,5 +175,12 @@ test.describe('local backend tournament realtime flow', () => {
       /recovered after reconnect/i,
     )
     await attachScreenshot(page, testInfo, '08-tournament-reconnected')
+    await expect(page.locator('.tournament-realtime-panel')).toHaveScreenshot(
+      '08-realtime-reconnected-panel.png',
+      {
+        animations: 'disabled',
+        mask: [page.getByTestId('tournament-recovery-note')],
+      },
+    )
   })
 })
