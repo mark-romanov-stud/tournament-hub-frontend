@@ -1,0 +1,307 @@
+import {
+  expect,
+  type Browser,
+  type Locator,
+  type Page,
+  request,
+  type TestInfo,
+  test,
+} from '@playwright/test'
+
+const backendOrigin = process.env.E2E_BACKEND_ORIGIN ?? 'http://127.0.0.1:3001'
+const apiBaseUrl = `${backendOrigin}/api/v1`
+const password = 'Password123!'
+
+interface TestUser {
+  accessToken: string
+  email: string
+  refreshToken: string
+  username: string
+}
+
+interface PreparedTournament {
+  owner: TestUser
+  participant: TestUser
+  prompt: string
+  tournamentId: string
+}
+
+async function attachScreenshot(page: Page, testInfo: TestInfo, name: string) {
+  await page.locator('[data-e2e-stage-marker]').evaluateAll((elements) => {
+    for (const element of elements) {
+      element.remove()
+    }
+  })
+  await page.evaluate((label) => {
+    const marker = document.createElement('div')
+    marker.dataset.e2eStageMarker = 'true'
+    marker.textContent = label
+    marker.style.position = 'fixed'
+    marker.style.top = '12px'
+    marker.style.left = '12px'
+    marker.style.zIndex = '2147483647'
+    marker.style.padding = '8px 12px'
+    marker.style.borderRadius = '10px'
+    marker.style.color = '#fff'
+    marker.style.background = 'rgb(17 24 39 / 92%)'
+    marker.style.font = '700 13px system-ui'
+    marker.style.boxShadow = '0 10px 30px rgb(0 0 0 / 20%)'
+    document.body.append(marker)
+  }, name)
+
+  const path = testInfo.outputPath(`${name}.png`)
+
+  await page.screenshot({ fullPage: true, path })
+  await testInfo.attach(name, {
+    path,
+    contentType: 'image/png',
+  })
+
+  await page.locator('[data-e2e-stage-marker]').evaluateAll((elements) => {
+    for (const element of elements) {
+      element.remove()
+    }
+  })
+}
+
+async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[] = []) {
+  await page.locator('[data-e2e-stage-marker]').evaluateAll((elements) => {
+    for (const element of elements) {
+      element.remove()
+    }
+  })
+
+  await expect(page.locator('.tournament-phase-panel')).toHaveScreenshot(`${name}.png`, {
+    animations: 'disabled',
+    mask,
+  })
+}
+
+async function registerUser(runId: string, index: number): Promise<TestUser> {
+  const api = await request.newContext()
+  const email = `submission-${runId}-${index}@pulse.test`
+  const username = `s${runId}${index}`.slice(0, 14)
+  const response = await api.post(`${apiBaseUrl}/auth/register`, {
+    data: { email, password, username },
+  })
+  const body = (await response.json()) as {
+    data: { accessToken: string; refreshToken: string }
+  }
+
+  expect(response.ok(), await response.text()).toBe(true)
+  await api.dispose()
+
+  return {
+    accessToken: body.data.accessToken,
+    email,
+    refreshToken: body.data.refreshToken,
+    username,
+  }
+}
+
+async function authorizedPost<T>(
+  path: string,
+  accessToken: string,
+  data: object,
+): Promise<T> {
+  const api = await request.newContext()
+  const response = await api.post(`${apiBaseUrl}${path}`, {
+    data,
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = (await response.json()) as { data: T }
+
+  expect(response.ok(), await response.text()).toBe(true)
+  await api.dispose()
+
+  return body.data
+}
+
+async function authorizedGet<T>(path: string, accessToken: string): Promise<T> {
+  const api = await request.newContext()
+  const response = await api.get(`${apiBaseUrl}${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = (await response.json()) as { data: T }
+
+  expect(response.ok(), await response.text()).toBe(true)
+  await api.dispose()
+
+  return body.data
+}
+
+async function prepareActiveTournament(): Promise<PreparedTournament> {
+  const runId = Math.random().toString(36).slice(2, 10)
+  const users = await Promise.all(
+    Array.from({ length: 4 }, (_, index) => registerUser(runId, index + 1)),
+  )
+  const [owner, participant] = users
+
+  const tournament = await authorizedPost<{ id: string }>(
+    '/tournaments',
+    owner.accessToken,
+    {
+      description: 'Local Playwright submission phase UI check.',
+      roundsCount: 3,
+      submissionDurationSeconds: 45,
+      title: `Submission Phase ${runId}`,
+      visibility: 'PUBLIC',
+      voteDurationSeconds: 30,
+    },
+  )
+
+  await Promise.all(
+    users
+      .slice(1)
+      .map((user) =>
+        authorizedPost<boolean>(
+          `/tournaments/${tournament.id}/join`,
+          user.accessToken,
+          {},
+        ),
+      ),
+  )
+
+  await authorizedPost<boolean>(
+    `/tournaments/${tournament.id}/start`,
+    owner.accessToken,
+    {},
+  )
+
+  const fullTournament = await authorizedGet<{
+    currentRound: {
+      prompt: { content: string | { en: string } }
+    } | null
+  }>(`/tournaments/${tournament.id}/full`, owner.accessToken)
+
+  const promptContent = fullTournament.currentRound?.prompt.content
+
+  return {
+    owner,
+    participant,
+    prompt: typeof promptContent === 'string' ? promptContent : (promptContent?.en ?? ''),
+    tournamentId: tournament.id,
+  }
+}
+
+async function createAuthenticatedPage(
+  browser: Browser,
+  user: TestUser,
+  tournamentId: string,
+) {
+  const context = await browser.newContext()
+
+  await context.addInitScript(
+    ({ accessToken, refreshToken }) => {
+      window.sessionStorage.setItem('tournament-hub.auth.access-token', accessToken)
+      window.sessionStorage.setItem('tournament-hub.auth.refresh-token', refreshToken)
+    },
+    {
+      accessToken: user.accessToken,
+      refreshToken: user.refreshToken,
+    },
+  )
+
+  const page = await context.newPage()
+  await page.goto(`/tournaments/${tournamentId}`)
+
+  return { context, page }
+}
+
+test.describe('local backend submission phase UI', () => {
+  test.beforeAll(async () => {
+    const api = await request.newContext()
+    const response = await api.get(`${backendOrigin}/health`)
+
+    expect(
+      response.ok(),
+      `Local backend must be running at ${backendOrigin}. Start tournament-hub-backend before running npm run test:e2e:local.`,
+    ).toBe(true)
+
+    await api.dispose()
+  })
+
+  test('shows prompt, timer, hidden submissions, realtime progress, and voting transition', async ({
+    browser,
+  }, testInfo) => {
+    const { owner, participant, prompt, tournamentId } = await prepareActiveTournament()
+    const ownerSession = await createAuthenticatedPage(browser, owner, tournamentId)
+    const participantSession = await createAuthenticatedPage(
+      browser,
+      participant,
+      tournamentId,
+    )
+    const ownerPage = ownerSession.page
+    const participantPage = participantSession.page
+    const participantSubmission = 'Participant answer must remain hidden.'
+
+    await expect(
+      ownerPage.getByRole('heading', { name: /round 1 submission/i }),
+    ).toBeVisible()
+    await expect(ownerPage.getByText(prompt)).toBeVisible()
+    await expect(ownerPage.getByTestId('submission-countdown')).toContainText(
+      /seconds remaining/i,
+    )
+    await expect(ownerPage.getByTestId('submission-progress')).toContainText(
+      /0 of \d+ submitted/u,
+    )
+    await attachScreenshot(ownerPage, testInfo, '01-owner-submission-phase')
+    await expectPhasePanelSnapshot(ownerPage, '01-owner-submission-phase-panel', [
+      ownerPage.getByTestId('submission-countdown'),
+      ownerPage.locator('.tournament-prompt'),
+    ])
+
+    await expect(
+      participantPage.getByRole('heading', { name: /round 1 submission/i }),
+    ).toBeVisible()
+    await participantPage.getByLabel(/your submission/i).fill(participantSubmission)
+    await attachScreenshot(participantPage, testInfo, '02-participant-ready-to-submit')
+    await expectPhasePanelSnapshot(
+      participantPage,
+      '02-participant-ready-to-submit-panel',
+      [
+        participantPage.getByTestId('submission-countdown'),
+        participantPage.locator('.tournament-prompt'),
+        participantPage.getByLabel(/your submission/i),
+      ],
+    )
+    await participantPage.getByRole('button', { name: /submit response/i }).click()
+    await expect(participantPage.getByText(/submission saved/i)).toBeVisible()
+
+    await expect(ownerPage.getByTestId('submission-progress')).toContainText(
+      /1 of 2 submitted/u,
+    )
+    await expect(
+      ownerPage.getByText(/submissions are hidden until voting starts/i),
+    ).toBeVisible()
+    await expect(ownerPage.getByText(participantSubmission)).toHaveCount(0)
+    await attachScreenshot(ownerPage, testInfo, '03-owner-progress-hidden-content')
+    await expectPhasePanelSnapshot(ownerPage, '03-owner-progress-hidden-content-panel', [
+      ownerPage.getByTestId('submission-countdown'),
+      ownerPage.locator('.tournament-prompt'),
+    ])
+
+    await ownerPage
+      .getByLabel(/your submission/i)
+      .fill('Owner answer that completes the active submission set.')
+    await attachScreenshot(ownerPage, testInfo, '04-owner-ready-to-submit')
+    await expectPhasePanelSnapshot(ownerPage, '04-owner-ready-to-submit-panel', [
+      ownerPage.getByTestId('submission-countdown'),
+      ownerPage.locator('.tournament-prompt'),
+      ownerPage.getByLabel(/your submission/i),
+    ])
+    await ownerPage.getByRole('button', { name: /submit response/i }).click()
+
+    await expect(
+      ownerPage.getByRole('heading', { name: /round 1 voting/i }),
+    ).toBeVisible()
+    await expect(ownerPage.getByRole('button', { name: /submit response/i })).toHaveCount(
+      0,
+    )
+    await attachScreenshot(ownerPage, testInfo, '05-owner-voting-after-transition')
+    await expectPhasePanelSnapshot(ownerPage, '05-owner-voting-after-transition-panel')
+
+    await participantSession.context.close()
+    await ownerSession.context.close()
+  })
+})

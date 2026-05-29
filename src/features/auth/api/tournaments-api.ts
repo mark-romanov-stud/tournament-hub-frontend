@@ -32,6 +32,8 @@ export interface FullTournamentParticipant {
   cumulativeScore: number
 }
 
+export type RoundPromptContent = string | { en: string; ru: string }
+
 export interface FullTournament {
   id: string
   title: string
@@ -50,12 +52,25 @@ export interface FullTournament {
     prompt: {
       key: string
       type: string
-      content: string
+      content: RoundPromptContent
     }
     submissionDeadline: string
     submissionClosedAt: string | null
     votingDeadline: string | null
   } | null
+}
+
+export interface UpsertRoundSubmissionInput {
+  roundId: string
+  content: string
+}
+
+export interface RoundSubmission {
+  id: string
+  roundId: string
+  authorId: string
+  content: string
+  submittedAt?: string
 }
 
 function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisibility {
@@ -94,6 +109,15 @@ export const tournamentsApi = authApi.injectEndpoints({
       }),
       transformResponse: (response: { data: FullTournament }) => response.data,
     }),
+
+    upsertRoundSubmission: builder.mutation<RoundSubmission, UpsertRoundSubmissionInput>({
+      query: ({ roundId, content }) => ({
+        url: `/rounds/${roundId}/submissions`,
+        method: 'POST',
+        body: { content },
+      }),
+      transformResponse: (response: { data: RoundSubmission }) => response.data,
+    }),
   }),
 })
 
@@ -101,4 +125,5 @@ export const {
   useCreateTournamentMutation,
   useGetFullTournamentQuery,
   useLazyGetFullTournamentQuery,
+  useUpsertRoundSubmissionMutation,
 } = tournamentsApi

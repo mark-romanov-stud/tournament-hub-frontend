@@ -31,6 +31,35 @@ export const DEFAULT_TOURNAMENT_STATE = {
   currentRound: null,
 } as const
 
+export interface MockTournamentState {
+  id: string
+  title: string
+  description: string | null
+  visibility: string
+  status: string
+  roundsCount: number
+  submissionDurationSeconds: number
+  voteDurationSeconds: number
+  ownerId: string
+  participants: {
+    userId: string
+    cumulativeScore: number
+  }[]
+  currentRound: null | {
+    id: string
+    number: number
+    phase: string
+    prompt: {
+      key: string
+      type: string
+      content: string
+    }
+    submissionDeadline: string
+    submissionClosedAt: string | null
+    votingDeadline: string | null
+  }
+}
+
 interface MockAuthState {
   user: {
     id: string
@@ -44,6 +73,12 @@ interface MockAuthState {
 let mockAuthState: MockAuthState = {
   ...DEFAULT_AUTH_STATE,
   user: { ...DEFAULT_AUTH_STATE.user },
+}
+
+let mockTournamentState: MockTournamentState = {
+  ...DEFAULT_TOURNAMENT_STATE,
+  participants: [...DEFAULT_TOURNAMENT_STATE.participants],
+  currentRound: DEFAULT_TOURNAMENT_STATE.currentRound,
 }
 
 let fullTournamentRequestCount = 0
@@ -77,6 +112,11 @@ export function resetMockAuthState() {
     ...DEFAULT_AUTH_STATE,
     user: { ...DEFAULT_AUTH_STATE.user },
   }
+  mockTournamentState = {
+    ...DEFAULT_TOURNAMENT_STATE,
+    participants: [...DEFAULT_TOURNAMENT_STATE.participants],
+    currentRound: DEFAULT_TOURNAMENT_STATE.currentRound,
+  }
   fullTournamentRequestCount = 0
 }
 
@@ -86,6 +126,10 @@ export function getMockAuthState() {
 
 export function getFullTournamentRequestCount() {
   return fullTournamentRequestCount
+}
+
+export function setMockTournamentState(tournament: MockTournamentState) {
+  mockTournamentState = tournament
 }
 
 export const handlers = [
@@ -159,6 +203,23 @@ export const handlers = [
 
     fullTournamentRequestCount += 1
 
-    return successResponse(DEFAULT_TOURNAMENT_STATE)
+    return successResponse(mockTournamentState)
+  }),
+  http.post(`${API_BASE_URL}/rounds/:roundId/submissions`, async ({ request }) => {
+    const authorization = request.headers.get('authorization')
+
+    if (authorization !== `Bearer ${mockAuthState.accessToken}`) {
+      return errorResponse(['Unauthorized'], 401, 'Unauthorized')
+    }
+
+    const body = (await request.json()) as { content?: string }
+
+    return successResponse({
+      id: 'submission-1',
+      roundId: 'round-1',
+      authorId: mockAuthState.user.id,
+      content: body.content ?? '',
+      submittedAt: new Date().toISOString(),
+    })
   }),
 ]

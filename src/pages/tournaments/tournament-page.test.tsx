@@ -9,6 +9,7 @@ import {
   DEFAULT_TOURNAMENT_STATE,
   getFullTournamentRequestCount,
   resetMockAuthState,
+  setMockTournamentState,
 } from '@/test/handlers'
 
 type Listener = (...args: unknown[]) => void
@@ -164,5 +165,91 @@ describe('TournamentPage realtime flow', () => {
     })
     expect(fakeSocket.disconnectCount).toBe(1)
     expect(fakeSocket.totalListenerCount()).toBe(0)
+  })
+
+  it('shows submission prompt, countdown, progress, and hides participant submissions until voting starts', async () => {
+    const submissionDeadline = new Date(Date.now() + 30_000).toISOString()
+
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      status: 'ACTIVE',
+      participants: [
+        ...DEFAULT_TOURNAMENT_STATE.participants,
+        { userId: 'participant-2', cumulativeScore: 0 },
+        { userId: 'participant-3', cumulativeScore: 0 },
+        { userId: 'participant-4', cumulativeScore: 0 },
+      ],
+      currentRound: {
+        id: '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5',
+        number: 1,
+        phase: 'SUBMISSION',
+        prompt: {
+          key: 'alien_impress',
+          type: 'TEXT',
+          content: 'The best way to impress an alien visiting Earth.',
+        },
+        submissionDeadline,
+        submissionClosedAt: null,
+        votingDeadline: null,
+      },
+    })
+
+    const { user } = renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+
+    expect(
+      await screen.findByRole('heading', { name: /round 1 submission/i }),
+    ).toBeVisible()
+    expect(
+      screen.getByText('The best way to impress an alien visiting Earth.'),
+    ).toBeVisible()
+    expect(screen.getByTestId('submission-countdown')).toHaveTextContent(
+      /seconds remaining/i,
+    )
+    expect(screen.getByTestId('submission-progress')).toHaveTextContent(
+      '0 of 4 submitted',
+    )
+    expect(screen.getByText(/submissions are hidden until voting starts/i)).toBeVisible()
+
+    await user.type(
+      screen.getByLabelText(/your submission/i),
+      'A sincere tour through human music.',
+    )
+    await user.click(screen.getByRole('button', { name: /submit response/i }))
+
+    expect(await screen.findByText(/submission saved/i)).toBeVisible()
+    expect(screen.queryByText('A rival participant answer')).not.toBeInTheDocument()
+
+    act(() => {
+      fakeSocket.trigger('round:progress_updated', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId: '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5',
+        phase: 'SUBMISSION',
+        submittedCount: 2,
+        totalActiveParticipants: 4,
+        content: 'A rival participant answer',
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(screen.getByTestId('submission-progress')).toHaveTextContent(
+      '2 of 4 submitted',
+    )
+    expect(screen.queryByText('A rival participant answer')).not.toBeInTheDocument()
+
+    act(() => {
+      fakeSocket.trigger('round:phase_changed', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId: '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5',
+        roundNumber: 1,
+        previousPhase: 'SUBMISSION',
+        currentPhase: 'VOTING',
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(await screen.findByRole('heading', { name: /round 1 voting/i })).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /submit response/i }),
+    ).not.toBeInTheDocument()
   })
 })
