@@ -153,11 +153,7 @@ export function TournamentPage() {
   const canJoin = tournament.status === 'DRAFT' && !isOwner && !isParticipant
 
   const handleJoin = async () => {
-    const joinPayload = tournament.inviteToken
-      ? { tournamentId, inviteToken: tournament.inviteToken }
-      : { tournamentId }
-
-    await joinTournament(joinPayload).unwrap()
+    await joinTournament({ tournamentId }).unwrap()
     await refetch()
   }
 
@@ -196,8 +192,8 @@ export function TournamentPage() {
           </p>
 
           <p>
-            <strong>Submission duration:</strong>{' '}
-            {tournament.submissionDurationSeconds} seconds
+            <strong>Submission duration:</strong> {tournament.submissionDurationSeconds}{' '}
+            seconds
           </p>
 
           <p>
@@ -241,9 +237,7 @@ export function TournamentPage() {
                   {participant.userId}
                 </p>
 
-                <p style={{ margin: '8px 0 0' }}>
-                  Score: {participant.cumulativeScore}
-                </p>
+                <p style={{ margin: '8px 0 0' }}>Score: {participant.cumulativeScore}</p>
               </div>
             ))}
           </div>
