@@ -2,7 +2,6 @@ import { authApi } from '@/features/auth/api/auth-api'
 
 export type TournamentVisibility = 'public' | 'private'
 export type ApiTournamentVisibility = 'PUBLIC' | 'PRIVATE'
-export type TournamentStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 
 export interface CreateTournamentInput {
   title: string
@@ -18,22 +17,25 @@ export interface JoinTournamentInput {
   inviteToken?: string
 }
 
-export interface TournamentParticipant {
+export interface Tournament {
+  id: string
+  createdAt?: string
+  updatedAt?: string
+  title: string
+  description: string | null
+  visibility: ApiTournamentVisibility
+  roundsCount: number
+  submissionDurationSeconds: number
+  voteDurationSeconds: number
+  status?: string
+  inviteToken?: string | null
+  ownerId: string
+  participants?: FullTournamentParticipant[]
+}
+
+export interface FullTournamentParticipant {
   userId: string
   cumulativeScore: number
-}
-
-export interface UpsertRoundSubmissionInput {
-  roundId: string
-  content: string
-}
-
-export interface RoundSubmission {
-  id: string
-  roundId: string
-  authorId: string
-  content: string
-  submittedAt?: string
 }
 
 export type RoundPromptContent = string | { en: string; ru: string }
@@ -43,12 +45,12 @@ export interface FullTournament {
   title: string
   description: string | null
   visibility: ApiTournamentVisibility
-  status: TournamentStatus
+  status: string
   roundsCount: number
   submissionDurationSeconds: number
   voteDurationSeconds: number
   ownerId: string
-  participants: TournamentParticipant[]
+  participants: FullTournamentParticipant[]
   currentRound: {
     id: string
     number: number
@@ -64,20 +66,17 @@ export interface FullTournament {
   } | null
 }
 
-export interface Tournament {
+export interface UpsertRoundSubmissionInput {
+  roundId: string
+  content: string
+}
+
+export interface RoundSubmission {
   id: string
-  createdAt?: string
-  updatedAt?: string
-  title: string
-  description: string | null
-  visibility: ApiTournamentVisibility
-  roundsCount: number
-  submissionDurationSeconds: number
-  voteDurationSeconds: number
-  status: TournamentStatus
-  inviteToken?: string | null
-  ownerId: string
-  participants?: TournamentParticipant[]
+  roundId: string
+  authorId: string
+  content: string
+  submittedAt?: string
 }
 
 function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisibility {
@@ -127,6 +126,14 @@ export const tournamentsApi = authApi.injectEndpoints({
       transformResponse: (response: { data: Tournament }) => response.data,
     }),
 
+    getFullTournament: builder.query<FullTournament, string>({
+      query: (id) => ({
+        url: `/tournaments/${id}/full`,
+        method: 'GET',
+      }),
+      transformResponse: (response: { data: FullTournament }) => response.data,
+    }),
+
     upsertRoundSubmission: builder.mutation<RoundSubmission, UpsertRoundSubmissionInput>({
       query: ({ roundId, content }) => ({
         url: `/rounds/${roundId}/submissions`,
@@ -142,14 +149,6 @@ export const tournamentsApi = authApi.injectEndpoints({
         method: 'GET',
       }),
       transformResponse: (response: { data: Tournament }) => response.data,
-    }),
-
-    getFullTournament: builder.query<FullTournament, string>({
-      query: (id) => ({
-        url: `/tournaments/${id}/full`,
-        method: 'GET',
-      }),
-      transformResponse: (response: { data: FullTournament }) => response.data,
     }),
 
     joinTournament: builder.mutation<boolean, JoinTournamentInput>({
