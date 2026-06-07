@@ -6,6 +6,7 @@ import {
   type FullTournament,
   type RoundPromptContent,
   useGetFullTournamentQuery,
+  useGetTournamentQuery,
   useJoinTournamentMutation,
   useUpsertRoundSubmissionMutation,
 } from '@/features/auth/api/tournaments-api'
@@ -575,38 +576,67 @@ export function TournamentPage() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
   const currentUser = useAppSelector((state) => state.auth.user)
+  const [hasJoined, setHasJoined] = useState(false)
 
   const {
-    data: tournament,
-    isLoading,
-    isError,
-    refetch,
-  } = useGetFullTournamentQuery(tournamentId ?? '', {
+    data: draftTournament,
+    isLoading: isDraftLoading,
+    isError: isDraftError,
+    refetch: refetchDraftTournament,
+  } = useGetTournamentQuery(tournamentId ?? '', {
     skip: !tournamentId,
   })
-  const { connectionStatus, lastEvent, lastRecoveredAt } =
-    useTournamentRealtime(tournamentId)
+
+  const draftParticipants = draftTournament?.participants ?? []
+  const isOwner = currentUser?.id === draftTournament?.ownerId
+  const isDraftParticipant = draftParticipants.some(
+    (participant) => participant.userId === currentUser?.id,
+  )
+  const canViewFullTournament = isOwner || isDraftParticipant || hasJoined
+
+  const {
+    data: fullTournament,
+    isLoading: isFullLoading,
+    isError: isFullError,
+    refetch: refetchFullTournament,
+  } = useGetFullTournamentQuery(tournamentId ?? '', {
+    skip: !tournamentId || (!canViewFullTournament && !isDraftError),
+  })
+
+  const { connectionStatus, lastEvent, lastRecoveredAt } = useTournamentRealtime(
+    fullTournament ? tournamentId : undefined,
+  )
 
   const [joinTournament, { isLoading: isJoining, error: joinError }] =
     useJoinTournamentMutation()
 
-  if (isLoading) {
+  if (isDraftLoading || isFullLoading) {
     return <p>Loading tournament...</p>
   }
 
-  if (isError || !tournament || !tournamentId) {
+  const activeTournament = fullTournament ?? draftTournament
+
+  if (!activeTournament || !tournamentId || (isDraftError && isFullError)) {
     return <p>Tournament not found.</p>
   }
 
-  const isOwner = currentUser?.id === tournament.ownerId
-  const isParticipant = tournament.participants.some(
+  const participants = fullTournament?.participants ?? draftParticipants
+
+  const isParticipant = participants.some(
     (participant) => participant.userId === currentUser?.id,
   )
-  const canJoin = tournament.status === 'DRAFT' && !isOwner && !isParticipant
+
+  const canJoin = activeTournament.status === 'DRAFT' && !isOwner && !isParticipant
 
   const handleJoin = async () => {
-    await joinTournament({ tournamentId }).unwrap()
-    await refetch()
+    const joinPayload = draftTournament?.inviteToken
+      ? { tournamentId, inviteToken: draftTournament.inviteToken }
+      : { tournamentId }
+
+    await joinTournament(joinPayload).unwrap()
+    setHasJoined(true)
+    await refetchDraftTournament()
+    await refetchFullTournament()
   }
 
   return (
@@ -622,26 +652,30 @@ export function TournamentPage() {
         </p>
 
         <div className="create-tournament-card">
-          <h2>{tournament.title}</h2>
+          <h2>{activeTournament.title}</h2>
 
-          <TournamentRealtimePanel
-            connectionStatus={connectionStatus}
-            lastEvent={lastEvent}
-            lastRecoveredAt={lastRecoveredAt}
-          />
+          {fullTournament ? (
+            <>
+              <TournamentRealtimePanel
+                connectionStatus={connectionStatus}
+                lastEvent={lastEvent}
+                lastRecoveredAt={lastRecoveredAt}
+              />
 
-          <TournamentRoundPhasePanel
-            key={`${tournament.id}-${tournament.currentRound?.id ?? 'waiting'}`}
-            tournament={tournament}
-            lastEvent={lastEvent}
-          />
+              <TournamentRoundPhasePanel
+                key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+                tournament={fullTournament}
+                lastEvent={lastEvent}
+              />
+            </>
+          ) : null}
 
           {joinError ? (
             <p className="form-error">{getApiErrorMessage(joinError)}</p>
           ) : null}
 
           <p style={{ marginBottom: '16px' }}>
-            <strong>Status:</strong> {tournament.status}
+            <strong>Status:</strong> {activeTournament.status}
           </p>
 
           <p
@@ -653,30 +687,30 @@ export function TournamentPage() {
           >
             <strong>Tournament ID:</strong>
             <br />
-            {tournament.id}
+            {activeTournament.id}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
             <strong>Description:</strong>
             <br />
-            {tournament.description ?? 'No description'}
+            {activeTournament.description ?? 'No description'}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
-            <strong>Visibility:</strong> {tournament.visibility}
+            <strong>Visibility:</strong> {activeTournament.visibility}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
-            <strong>Rounds:</strong> {tournament.roundsCount}
+            <strong>Rounds:</strong> {activeTournament.roundsCount}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
-            <strong>Submission duration:</strong> {tournament.submissionDurationSeconds}{' '}
-            seconds
+            <strong>Submission duration:</strong>{' '}
+            {activeTournament.submissionDurationSeconds} seconds
           </p>
 
           <p style={{ marginBottom: '24px' }}>
-            <strong>Vote duration:</strong> {tournament.voteDurationSeconds} seconds
+            <strong>Vote duration:</strong> {activeTournament.voteDurationSeconds} seconds
           </p>
 
           <div style={{ marginBottom: '32px' }}>
@@ -690,11 +724,11 @@ export function TournamentPage() {
                 background: '#eef3fb',
               }}
             >
-              {tournament.participants.map((participant) => (
+              {participants.map((participant) => (
                 <div key={participant.userId}>
                   <p style={{ margin: 0 }}>
                     <strong>
-                      {participant.userId === tournament.ownerId
+                      {participant.userId === activeTournament.ownerId
                         ? 'Owner'
                         : 'Participant'}
                       {participant.userId === currentUser?.id ? ' · You' : ''}
