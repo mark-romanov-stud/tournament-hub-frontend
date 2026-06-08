@@ -39,6 +39,49 @@ export interface Tournament {
   participants?: TournamentParticipant[]
 }
 
+export type FullTournamentParticipant = TournamentParticipant
+
+export type RoundPromptContent = string | { en: string; ru: string }
+
+export interface FullTournament {
+  id: string
+  title: string
+  description: string | null
+  visibility: ApiTournamentVisibility
+  status: string
+  roundsCount: number
+  submissionDurationSeconds: number
+  voteDurationSeconds: number
+  ownerId: string
+  participants: FullTournamentParticipant[]
+  currentRound: {
+    id: string
+    number: number
+    phase: string
+    prompt: {
+      key: string
+      type: string
+      content: RoundPromptContent
+    }
+    submissionDeadline: string
+    submissionClosedAt: string | null
+    votingDeadline: string | null
+  } | null
+}
+
+export interface UpsertRoundSubmissionInput {
+  roundId: string
+  content: string
+}
+
+export interface RoundSubmission {
+  id: string
+  roundId: string
+  authorId: string
+  content: string
+  submittedAt?: string
+}
+
 function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisibility {
   return visibility === 'public' ? 'PUBLIC' : 'PRIVATE'
 }
@@ -94,6 +137,23 @@ export const tournamentsApi = authApi.injectEndpoints({
       transformResponse: (response: { data: Tournament }) => response.data,
     }),
 
+    getFullTournament: builder.query<FullTournament, string>({
+      query: (id) => ({
+        url: `/tournaments/${id}/full`,
+        method: 'GET',
+      }),
+      transformResponse: (response: { data: FullTournament }) => response.data,
+    }),
+
+    upsertRoundSubmission: builder.mutation<RoundSubmission, UpsertRoundSubmissionInput>({
+      query: ({ roundId, content }) => ({
+        url: `/rounds/${roundId}/submissions`,
+        method: 'POST',
+        body: { content },
+      }),
+      transformResponse: (response: { data: RoundSubmission }) => response.data,
+    }),
+
     joinTournament: builder.mutation<boolean, JoinTournamentInput>({
       query: ({ tournamentId, inviteToken }) => ({
         url: `/tournaments/${tournamentId}/join`,
@@ -102,12 +162,24 @@ export const tournamentsApi = authApi.injectEndpoints({
       }),
       transformResponse: (response: { data: boolean }) => response.data,
     }),
+
+    leaveTournament: builder.mutation<boolean, string>({
+      query: (tournamentId) => ({
+        url: `/tournaments/${tournamentId}/leave`,
+        method: 'POST',
+      }),
+      transformResponse: (response: { data: boolean }) => response.data,
+    }),
   }),
 })
 
 export const {
   useCreateTournamentMutation,
+  useGetFullTournamentQuery,
   useGetTournamentQuery,
   useGetTournamentsQuery,
   useJoinTournamentMutation,
+  useLeaveTournamentMutation,
+  useLazyGetFullTournamentQuery,
+  useUpsertRoundSubmissionMutation,
 } = tournamentsApi

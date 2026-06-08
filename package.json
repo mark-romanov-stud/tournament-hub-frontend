@@ -16,6 +16,7 @@
     "format:check": "prettier . --check",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e:local": "playwright test",
     "check": "npm run typecheck && npm run lint && npm run stylelint && npm run test:run && npm run build",
     "prepare": "husky"
   },
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
