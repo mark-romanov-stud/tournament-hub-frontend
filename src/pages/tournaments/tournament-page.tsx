@@ -545,19 +545,19 @@ export function TournamentPage() {
       return 'Waiting for lobby access'
     }
 
-    if (realtimeStatus === 'connected') {
-      return 'Connected'
-    }
+    switch (realtimeStatus) {
+      case 'connected':
+        return 'Connected'
 
-    if (realtimeStatus === 'failed') {
-      return 'Realtime connection failed'
-    }
+      case 'failed':
+        return 'Realtime connection failed'
 
-    if (realtimeStatus === 'room-error') {
-      return 'Unable to join realtime room'
-    }
+      case 'room-error':
+        return 'Unable to join realtime room'
 
-    return 'Connecting...'
+      default:
+        return 'Connecting...'
+    }
   }, [canAccessRealtimeRoom, realtimeStatus])
 
   useEffect(() => {
