@@ -29,9 +29,6 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "@emnapi/core": "^1.11.0",
-    "@emnapi/runtime": "^1.10.0",
-    "@emnapi/wasi-threads": "^1.2.2",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -70,8 +67,5 @@
       "prettier --write"
     ],
     "*.{html,json,md}": "prettier --write"
-  },
-  "optionalDependencies": {
-    "lightningcss-linux-x64-gnu": "1.32.0"
   }
 }
