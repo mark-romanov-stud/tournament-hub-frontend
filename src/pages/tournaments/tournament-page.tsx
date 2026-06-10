@@ -700,7 +700,27 @@ export function TournamentPage() {
         </p>
 
         <div className="create-tournament-card">
-          <h2>{tournament.title}</h2>
+          <h2>{activeTournament.title}</h2>
+
+          {fullTournament ? (
+            <>
+              <TournamentRealtimePanel
+                connectionStatus={connectionStatus}
+                lastEvent={lastEvent}
+                lastRecoveredAt={lastRecoveredAt}
+              />
+
+              <TournamentRoundPhasePanel
+                key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+                tournament={fullTournament}
+                lastEvent={lastEvent}
+              />
+            </>
+          ) : null}
+
+          {joinError ? (
+            <p className="form-error">{getApiErrorMessage(joinError)}</p>
+          ) : null}
 
           {fullTournament ? (
             <>
@@ -780,13 +800,13 @@ export function TournamentPage() {
           >
             <strong>Tournament ID:</strong>
             <br />
-            {tournament.id}
+            {activeTournament.id}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
             <strong>Description:</strong>
             <br />
-            {tournament.description ?? 'No description'}
+            {activeTournament.description ?? 'No description'}
           </p>
 
           <div style={{ marginBottom: '32px' }}>
@@ -846,6 +866,18 @@ export function TournamentPage() {
               }}
             >
               {isLeaving ? 'Leaving...' : 'Leave Tournament'}
+            </button>
+          ) : null}
+
+          {canJoin ? (
+            <button
+              className="create-button"
+              disabled={isJoining}
+              onClick={() => {
+                void handleJoin()
+              }}
+            >
+              {isJoining ? 'Joining...' : 'Join Tournament'}
             </button>
           ) : null}
 
