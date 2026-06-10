@@ -2,6 +2,12 @@ import { authApi } from '@/features/auth/api/auth-api'
 
 export type TournamentVisibility = 'public' | 'private'
 export type ApiTournamentVisibility = 'PUBLIC' | 'PRIVATE'
+export type TournamentStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+
+export interface TournamentParticipant {
+  userId: string
+  cumulativeScore: number
+}
 
 export interface CreateTournamentInput {
   title: string
@@ -27,16 +33,13 @@ export interface Tournament {
   roundsCount: number
   submissionDurationSeconds: number
   voteDurationSeconds: number
-  status?: string
+  status: TournamentStatus
   inviteToken?: string | null
   ownerId: string
-  participants?: FullTournamentParticipant[]
+  participants?: TournamentParticipant[]
 }
 
-export interface FullTournamentParticipant {
-  userId: string
-  cumulativeScore: number
-}
+export type FullTournamentParticipant = TournamentParticipant
 
 export type RoundPromptContent = string | { en: string; ru: string }
 
@@ -126,6 +129,14 @@ export const tournamentsApi = authApi.injectEndpoints({
       transformResponse: (response: { data: Tournament }) => response.data,
     }),
 
+    getTournament: builder.query<Tournament, string>({
+      query: (id) => ({
+        url: `/tournaments/${id}`,
+        method: 'GET',
+      }),
+      transformResponse: (response: { data: Tournament }) => response.data,
+    }),
+
     getFullTournament: builder.query<FullTournament, string>({
       query: (id) => ({
         url: `/tournaments/${id}/full`,
@@ -143,19 +154,19 @@ export const tournamentsApi = authApi.injectEndpoints({
       transformResponse: (response: { data: RoundSubmission }) => response.data,
     }),
 
-    getTournament: builder.query<Tournament, string>({
-      query: (id) => ({
-        url: `/tournaments/${id}`,
-        method: 'GET',
-      }),
-      transformResponse: (response: { data: Tournament }) => response.data,
-    }),
-
     joinTournament: builder.mutation<boolean, JoinTournamentInput>({
       query: ({ tournamentId, inviteToken }) => ({
         url: `/tournaments/${tournamentId}/join`,
         method: 'POST',
         body: inviteToken ? { inviteToken } : {},
+      }),
+      transformResponse: (response: { data: boolean }) => response.data,
+    }),
+
+    leaveTournament: builder.mutation<boolean, string>({
+      query: (tournamentId) => ({
+        url: `/tournaments/${tournamentId}/leave`,
+        method: 'POST',
       }),
       transformResponse: (response: { data: boolean }) => response.data,
     }),
@@ -168,6 +179,7 @@ export const {
   useGetTournamentQuery,
   useGetTournamentsQuery,
   useJoinTournamentMutation,
+  useLeaveTournamentMutation,
   useLazyGetFullTournamentQuery,
   useUpsertRoundSubmissionMutation,
 } = tournamentsApi

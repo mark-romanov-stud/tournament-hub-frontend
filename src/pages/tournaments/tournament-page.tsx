@@ -3,16 +3,36 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAppSelector } from '@/app/providers/store'
 import {
+  createTournamentSocket,
+  TournamentClientEvent,
+  TournamentServerEvent,
+} from '@/features/auth/api/tournament-socket'
+import {
   type FullTournament,
   type RoundPromptContent,
+  type TournamentParticipant,
   useGetFullTournamentQuery,
   useGetTournamentQuery,
   useJoinTournamentMutation,
+  useLeaveTournamentMutation,
   useUpsertRoundSubmissionMutation,
 } from '@/features/auth/api/tournaments-api'
 import type { TournamentRealtimeEvent } from '@/features/tournaments/realtime/tournament-realtime'
-import type { TournamentConnectionStatus } from '@/features/tournaments/realtime/use-tournament-realtime'
 import { useTournamentRealtime } from '@/features/tournaments/realtime/use-tournament-realtime'
+
+interface ParticipantEventPayload {
+  tournamentId: string
+  userId: string
+  occurredAt: string
+}
+
+interface PresenceUpdatedPayload {
+  tournamentId: string
+  activeCount: number
+  occurredAt: string
+}
+
+type RealtimeStatus = 'idle' | 'connected' | 'failed' | 'room-error'
 
 interface SubmissionProgress {
   roundId: string
@@ -85,42 +105,6 @@ interface VotingSubmissionRevealedPayload {
   votingDeadline: string
 }
 
-const realtimeStatusCopy: Record<
-  TournamentConnectionStatus,
-  { label: string; tone: string; title: string; description: string }
-> = {
-  connected: {
-    label: 'Connected',
-    tone: 'connected',
-    title: 'Live room connected',
-    description: 'You are subscribed to realtime tournament updates.',
-  },
-  connecting: {
-    label: 'Reconnecting',
-    tone: 'connecting',
-    title: 'Trying to reconnect',
-    description: 'The client is restoring the socket connection.',
-  },
-  disconnected: {
-    label: 'Disconnected',
-    tone: 'disconnected',
-    title: 'Connection lost',
-    description: 'Realtime updates are paused until the socket reconnects.',
-  },
-  idle: {
-    label: 'Waiting',
-    tone: 'idle',
-    title: 'Realtime is preparing',
-    description: 'The tournament room subscription has not started yet.',
-  },
-  recovering: {
-    label: 'Recovering',
-    tone: 'recovering',
-    title: 'Reconnected, restoring state',
-    description: 'The room is joined again and tournament state is being refreshed.',
-  },
-}
-
 function getApiErrorMessage(error: unknown) {
   if (typeof error === 'object' && error !== null && 'data' in error) {
     const data = (error as { data?: { message?: string[] | string } }).data
@@ -135,62 +119,6 @@ function getApiErrorMessage(error: unknown) {
   }
 
   return 'Failed to join tournament. Please try again.'
-}
-
-function TournamentRealtimePanel({
-  connectionStatus,
-  lastEvent,
-  lastRecoveredAt,
-}: {
-  connectionStatus: TournamentConnectionStatus
-  lastEvent: TournamentRealtimeEvent | null
-  lastRecoveredAt: string | null
-}) {
-  const status = realtimeStatusCopy[connectionStatus]
-
-  return (
-    <section
-      className={`tournament-realtime-panel tournament-realtime-panel-${status.tone}`}
-      aria-live="polite"
-    >
-      <div className="tournament-realtime-panel-header">
-        <div>
-          <p className="tournament-realtime-panel-eyebrow">Realtime room</p>
-          <h3>{status.title}</h3>
-        </div>
-
-        <span
-          className="tournament-realtime-panel-badge"
-          data-testid="tournament-realtime-status"
-        >
-          <span className="tournament-realtime-panel-dot" />
-          {status.label}
-        </span>
-      </div>
-
-      <p className="tournament-realtime-panel-copy">{status.description}</p>
-
-      {lastRecoveredAt ? (
-        <p
-          className="tournament-realtime-panel-recovery"
-          data-testid="tournament-recovery-note"
-        >
-          State recovered after reconnect at {lastRecoveredAt}
-        </p>
-      ) : null}
-
-      {lastEvent ? (
-        <p
-          className="tournament-realtime-panel-event"
-          data-testid="tournament-latest-event"
-        >
-          Latest event: <strong>{lastEvent.name}</strong>
-        </p>
-      ) : (
-        <p className="tournament-realtime-panel-event">Waiting for first event…</p>
-      )}
-    </section>
-  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -411,22 +339,6 @@ function TournamentRoundPhasePanel({
     }
   }
 
-  if (lastEvent?.name === 'round:phase_changed') {
-    const payload = lastEvent.payload
-    if (
-      currentRound &&
-      isRoundPhaseChangedPayload(payload) &&
-      payload.tournamentId === tournament.id &&
-      payload.roundId === currentRound.id
-    ) {
-      currentRound = {
-        ...currentRound,
-        phase: payload.currentPhase,
-        submissionClosedAt: payload.occurredAt ?? new Date().toISOString(),
-      }
-    }
-  }
-
   if (!currentRound) {
     return (
       <section className="tournament-phase-panel">
@@ -474,6 +386,7 @@ function SubmissionPhasePanel({
   const submittedCount = progress?.roundId === round.id ? progress.submittedCount : 0
   const totalParticipants =
     progress?.roundId === round.id ? progress.totalActiveParticipants : participantCount
+
   const progressPercent = useMemo(() => {
     if (totalParticipants <= 0) {
       return 0
@@ -578,6 +491,12 @@ export function TournamentPage() {
   const currentUser = useAppSelector((state) => state.auth.user)
   const [hasJoined, setHasJoined] = useState(false)
 
+  const [realtimeParticipants, setRealtimeParticipants] = useState<
+    TournamentParticipant[] | null
+  >(null)
+  const [activeCount, setActiveCount] = useState(0)
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('idle')
+
   const {
     data: draftTournament,
     isLoading: isDraftLoading,
@@ -598,35 +517,154 @@ export function TournamentPage() {
     data: fullTournament,
     isLoading: isFullLoading,
     isError: isFullError,
-    refetch: refetchFullTournament,
   } = useGetFullTournamentQuery(tournamentId ?? '', {
     skip: !tournamentId || (!canViewFullTournament && !isDraftError),
   })
 
+  const tournament = fullTournament ?? draftTournament
+  const baseParticipants = fullTournament?.participants ?? draftParticipants
+  const displayedParticipants = realtimeParticipants ?? baseParticipants
+
+  const isParticipant = displayedParticipants.some(
+    (participant) => participant.userId === currentUser?.id,
+  )
+  const canAccessRealtimeRoom = Boolean(tournamentId && (isOwner || isParticipant))
+
   const { connectionStatus, lastEvent, lastRecoveredAt } = useTournamentRealtime(
-    fullTournament ? tournamentId : undefined,
+    canAccessRealtimeRoom ? tournamentId : undefined,
   )
 
   const [joinTournament, { isLoading: isJoining, error: joinError }] =
     useJoinTournamentMutation()
 
+  const [leaveTournament, { isLoading: isLeaving, error: leaveError }] =
+    useLeaveTournamentMutation()
+
+  const realtimeStatusLabel = useMemo(() => {
+    if (!canAccessRealtimeRoom) {
+      return 'Waiting for lobby access'
+    }
+
+    switch (realtimeStatus) {
+      case 'connected':
+        return 'Connected'
+
+      case 'failed':
+        return 'Realtime connection failed'
+
+      case 'room-error':
+        return 'Unable to join realtime room'
+
+      default:
+        return 'Connecting...'
+    }
+  }, [canAccessRealtimeRoom, realtimeStatus])
+
+  useEffect(() => {
+    if (!tournamentId || !canAccessRealtimeRoom) {
+      return
+    }
+
+    const socket = createTournamentSocket()
+
+    socket.on('connect', () => {
+      setRealtimeStatus('connected')
+
+      socket.emit(
+        TournamentClientEvent.JOIN,
+        { tournamentId },
+        (ack?: { success?: boolean }) => {
+          if (!ack?.success) {
+            setRealtimeStatus('room-error')
+          }
+        },
+      )
+    })
+
+    socket.on('connect_error', () => {
+      setRealtimeStatus('failed')
+    })
+
+    socket.on(
+      TournamentServerEvent.PARTICIPANT_JOINED,
+      (payload: ParticipantEventPayload) => {
+        if (payload.tournamentId !== tournamentId) {
+          return
+        }
+
+        setRealtimeParticipants((currentParticipants) => {
+          const participants = currentParticipants ?? baseParticipants
+          const isAlreadyInList = participants.some(
+            (participant) => participant.userId === payload.userId,
+          )
+
+          if (isAlreadyInList) {
+            return participants
+          }
+
+          return [
+            ...participants,
+            {
+              userId: payload.userId,
+              cumulativeScore: 0,
+            },
+          ]
+        })
+      },
+    )
+
+    socket.on(
+      TournamentServerEvent.PARTICIPANT_LEFT,
+      (payload: ParticipantEventPayload) => {
+        if (payload.tournamentId !== tournamentId) {
+          return
+        }
+
+        setRealtimeParticipants((currentParticipants) => {
+          const participants = currentParticipants ?? baseParticipants
+
+          return participants.filter(
+            (participant) => participant.userId !== payload.userId,
+          )
+        })
+      },
+    )
+
+    socket.on(
+      TournamentServerEvent.PRESENCE_UPDATED,
+      (payload: PresenceUpdatedPayload) => {
+        if (payload.tournamentId !== tournamentId) {
+          return
+        }
+
+        setActiveCount(payload.activeCount)
+      },
+    )
+
+    return () => {
+      if (socket.connected) {
+        socket.emit(TournamentClientEvent.LEAVE, { tournamentId })
+      }
+
+      socket.off('connect')
+      socket.off('connect_error')
+      socket.off('disconnect')
+      socket.off(TournamentServerEvent.PARTICIPANT_JOINED)
+      socket.off(TournamentServerEvent.PARTICIPANT_LEFT)
+      socket.off(TournamentServerEvent.PRESENCE_UPDATED)
+    }
+  }, [baseParticipants, canAccessRealtimeRoom, tournamentId])
+
   if (isDraftLoading || isFullLoading) {
     return <p>Loading tournament...</p>
   }
 
-  const activeTournament = fullTournament ?? draftTournament
-
-  if (!activeTournament || !tournamentId || (isDraftError && isFullError)) {
+  if (!tournament || !tournamentId || (isDraftError && isFullError)) {
     return <p>Tournament not found.</p>
   }
 
-  const participants = fullTournament?.participants ?? draftParticipants
-
-  const isParticipant = participants.some(
-    (participant) => participant.userId === currentUser?.id,
-  )
-
-  const canJoin = activeTournament.status === 'DRAFT' && !isOwner && !isParticipant
+  const canJoin = tournament.status === 'DRAFT' && !isOwner && !isParticipant
+  const canLeave = tournament.status === 'DRAFT' && !isOwner && isParticipant
 
   const handleJoin = async () => {
     const joinPayload = draftTournament?.inviteToken
@@ -636,7 +674,17 @@ export function TournamentPage() {
     await joinTournament(joinPayload).unwrap()
     setHasJoined(true)
     await refetchDraftTournament()
-    await refetchFullTournament()
+  }
+
+  const handleLeave = async () => {
+    await leaveTournament(tournamentId).unwrap()
+    setHasJoined(false)
+    setRealtimeParticipants((currentParticipants) =>
+      (currentParticipants ?? baseParticipants).filter(
+        (participant) => participant.userId !== currentUser?.id,
+      ),
+    )
+    await refetchDraftTournament()
   }
 
   return (
@@ -674,8 +722,73 @@ export function TournamentPage() {
             <p className="form-error">{getApiErrorMessage(joinError)}</p>
           ) : null}
 
+          {fullTournament ? (
+            <>
+              <section className="tournament-realtime-panel" aria-live="polite">
+                <span data-testid="tournament-realtime-status">
+                  {connectionStatus === 'connected'
+                    ? 'Connected'
+                    : connectionStatus === 'disconnected'
+                      ? 'Disconnected'
+                      : 'Connecting'}
+                </span>
+
+                {lastRecoveredAt ? (
+                  <p data-testid="tournament-recovery-note">
+                    State recovered after reconnect at {lastRecoveredAt}
+                  </p>
+                ) : null}
+
+                {lastEvent ? (
+                  <p data-testid="tournament-latest-event">
+                    Latest event: <strong>{lastEvent.name}</strong>
+                  </p>
+                ) : null}
+              </section>
+
+              <TournamentRoundPhasePanel
+                key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+                tournament={fullTournament}
+                lastEvent={lastEvent}
+              />
+            </>
+          ) : null}
+
+          {joinError ? (
+            <p className="form-error">{getApiErrorMessage(joinError)}</p>
+          ) : null}
+
+          {leaveError ? (
+            <p className="form-error">{getApiErrorMessage(leaveError)}</p>
+          ) : null}
+
           <p style={{ marginBottom: '16px' }}>
-            <strong>Status:</strong> {activeTournament.status}
+            <strong>Status:</strong> {tournament.status}
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Visibility:</strong> {tournament.visibility}
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Rounds:</strong> {tournament.roundsCount}
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Submission duration:</strong> {tournament.submissionDurationSeconds}{' '}
+            seconds
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Vote duration:</strong> {tournament.voteDurationSeconds} seconds
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Realtime:</strong> {realtimeStatusLabel}
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Active users:</strong> {canAccessRealtimeRoom ? activeCount : 0}
           </p>
 
           <p
@@ -696,59 +809,14 @@ export function TournamentPage() {
             {activeTournament.description ?? 'No description'}
           </p>
 
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Visibility:</strong> {activeTournament.visibility}
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Rounds:</strong> {activeTournament.roundsCount}
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Submission duration:</strong>{' '}
-            {activeTournament.submissionDurationSeconds} seconds
-          </p>
-
-          <p style={{ marginBottom: '24px' }}>
-            <strong>Vote duration:</strong> {activeTournament.voteDurationSeconds} seconds
-          </p>
-
           <div style={{ marginBottom: '32px' }}>
             <h3>Participants</h3>
 
-            <div
-              style={{
-                marginTop: '12px',
-                padding: '16px',
-                borderRadius: '16px',
-                background: '#eef3fb',
-              }}
-            >
-              {participants.map((participant) => (
-                <div key={participant.userId}>
-                  <p style={{ margin: 0 }}>
-                    <strong>
-                      {participant.userId === activeTournament.ownerId
-                        ? 'Owner'
-                        : 'Participant'}
-                      {participant.userId === currentUser?.id ? ' · You' : ''}
-                    </strong>
-                  </p>
+            {displayedParticipants.length === 0 ? <p>No participants yet.</p> : null}
 
-                  <p
-                    style={{
-                      margin: '8px 0 0',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {participant.userId}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {isParticipant && !isOwner ? (
+            {displayedParticipants.map((participant) => (
               <div
+                key={participant.userId}
                 style={{
                   marginTop: '12px',
                   padding: '16px',
@@ -757,11 +825,49 @@ export function TournamentPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  <strong>You joined this tournament</strong>
+                  <strong>
+                    {participant.userId === tournament.ownerId ? 'Owner' : 'Participant'}
+                    {participant.userId === currentUser?.id ? ' · You' : ''}
+                  </strong>
                 </p>
+
+                <p
+                  style={{
+                    margin: '8px 0 0',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {participant.userId}
+                </p>
+
+                <p style={{ margin: '8px 0 0' }}>Score: {participant.cumulativeScore}</p>
               </div>
-            ) : null}
+            ))}
           </div>
+
+          {canJoin ? (
+            <button
+              className="create-button"
+              disabled={isJoining}
+              onClick={() => {
+                void handleJoin()
+              }}
+            >
+              {isJoining ? 'Joining...' : 'Join Tournament'}
+            </button>
+          ) : null}
+
+          {canLeave ? (
+            <button
+              className="create-button"
+              disabled={isLeaving}
+              onClick={() => {
+                void handleLeave()
+              }}
+            >
+              {isLeaving ? 'Leaving...' : 'Leave Tournament'}
+            </button>
+          ) : null}
 
           {canJoin ? (
             <button
