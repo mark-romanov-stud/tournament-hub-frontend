@@ -1,10 +1,13 @@
 import { type FormEvent, useEffect, useMemo, useReducer, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { useAppSelector } from '@/app/providers/store'
 import {
   type FullTournament,
   type RoundPromptContent,
   useGetFullTournamentQuery,
+  useGetTournamentQuery,
+  useJoinTournamentMutation,
   useUpsertRoundSubmissionMutation,
 } from '@/features/auth/api/tournaments-api'
 import type { TournamentRealtimeEvent } from '@/features/tournaments/realtime/tournament-realtime'
@@ -116,6 +119,22 @@ const realtimeStatusCopy: Record<
     title: 'Reconnected, restoring state',
     description: 'The room is joined again and tournament state is being refreshed.',
   },
+}
+
+function getApiErrorMessage(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'data' in error) {
+    const data = (error as { data?: { message?: string[] | string } }).data
+
+    if (Array.isArray(data?.message) && data.message.length > 0) {
+      return data.message[0] ?? 'Failed to join tournament. Please try again.'
+    }
+
+    if (typeof data?.message === 'string') {
+      return data.message
+    }
+  }
+
+  return 'Failed to join tournament. Please try again.'
 }
 
 function TournamentRealtimePanel({
@@ -556,23 +575,68 @@ function SubmissionPhasePanel({
 export function TournamentPage() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
+  const currentUser = useAppSelector((state) => state.auth.user)
+  const [hasJoined, setHasJoined] = useState(false)
 
   const {
-    data: tournament,
-    isLoading,
-    isError,
-  } = useGetFullTournamentQuery(tournamentId ?? '', {
+    data: draftTournament,
+    isLoading: isDraftLoading,
+    isError: isDraftError,
+    refetch: refetchDraftTournament,
+  } = useGetTournamentQuery(tournamentId ?? '', {
     skip: !tournamentId,
   })
-  const { connectionStatus, lastEvent, lastRecoveredAt } =
-    useTournamentRealtime(tournamentId)
 
-  if (isLoading) {
+  const draftParticipants = draftTournament?.participants ?? []
+  const isOwner = currentUser?.id === draftTournament?.ownerId
+  const isDraftParticipant = draftParticipants.some(
+    (participant) => participant.userId === currentUser?.id,
+  )
+  const canViewFullTournament = isOwner || isDraftParticipant || hasJoined
+
+  const {
+    data: fullTournament,
+    isLoading: isFullLoading,
+    isError: isFullError,
+    refetch: refetchFullTournament,
+  } = useGetFullTournamentQuery(tournamentId ?? '', {
+    skip: !tournamentId || (!canViewFullTournament && !isDraftError),
+  })
+
+  const { connectionStatus, lastEvent, lastRecoveredAt } = useTournamentRealtime(
+    fullTournament ? tournamentId : undefined,
+  )
+
+  const [joinTournament, { isLoading: isJoining, error: joinError }] =
+    useJoinTournamentMutation()
+
+  if (isDraftLoading || isFullLoading) {
     return <p>Loading tournament...</p>
   }
 
-  if (isError || !tournament) {
+  const activeTournament = fullTournament ?? draftTournament
+
+  if (!activeTournament || !tournamentId || (isDraftError && isFullError)) {
     return <p>Tournament not found.</p>
+  }
+
+  const participants = fullTournament?.participants ?? draftParticipants
+
+  const isParticipant = participants.some(
+    (participant) => participant.userId === currentUser?.id,
+  )
+
+  const canJoin = activeTournament.status === 'DRAFT' && !isOwner && !isParticipant
+
+  const handleJoin = async () => {
+    const joinPayload = draftTournament?.inviteToken
+      ? { tournamentId, inviteToken: draftTournament.inviteToken }
+      : { tournamentId }
+
+    await joinTournament(joinPayload).unwrap()
+    setHasJoined(true)
+    await refetchDraftTournament()
+    await refetchFullTournament()
   }
 
   return (
@@ -588,19 +652,31 @@ export function TournamentPage() {
         </p>
 
         <div className="create-tournament-card">
-          <h2>{tournament.title}</h2>
+          <h2>{activeTournament.title}</h2>
 
-          <TournamentRealtimePanel
-            connectionStatus={connectionStatus}
-            lastEvent={lastEvent}
-            lastRecoveredAt={lastRecoveredAt}
-          />
+          {fullTournament ? (
+            <>
+              <TournamentRealtimePanel
+                connectionStatus={connectionStatus}
+                lastEvent={lastEvent}
+                lastRecoveredAt={lastRecoveredAt}
+              />
 
-          <TournamentRoundPhasePanel
-            key={`${tournament.id}-${tournament.currentRound?.id ?? 'waiting'}`}
-            tournament={tournament}
-            lastEvent={lastEvent}
-          />
+              <TournamentRoundPhasePanel
+                key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+                tournament={fullTournament}
+                lastEvent={lastEvent}
+              />
+            </>
+          ) : null}
+
+          {joinError ? (
+            <p className="form-error">{getApiErrorMessage(joinError)}</p>
+          ) : null}
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Status:</strong> {activeTournament.status}
+          </p>
 
           <p
             style={{
@@ -611,21 +687,30 @@ export function TournamentPage() {
           >
             <strong>Tournament ID:</strong>
             <br />
-            {tournament.id}
+            {activeTournament.id}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
             <strong>Description:</strong>
             <br />
-            {tournament.description ?? 'No description'}
+            {activeTournament.description ?? 'No description'}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
-            <strong>Visibility:</strong> {tournament.visibility}
+            <strong>Visibility:</strong> {activeTournament.visibility}
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Rounds:</strong> {activeTournament.roundsCount}
+          </p>
+
+          <p style={{ marginBottom: '16px' }}>
+            <strong>Submission duration:</strong>{' '}
+            {activeTournament.submissionDurationSeconds} seconds
           </p>
 
           <p style={{ marginBottom: '24px' }}>
-            <strong>Rounds:</strong> {tournament.roundsCount}
+            <strong>Vote duration:</strong> {activeTournament.voteDurationSeconds} seconds
           </p>
 
           <div style={{ marginBottom: '32px' }}>
@@ -639,13 +724,14 @@ export function TournamentPage() {
                 background: '#eef3fb',
               }}
             >
-              {tournament.participants.map((participant) => (
+              {participants.map((participant) => (
                 <div key={participant.userId}>
                   <p style={{ margin: 0 }}>
                     <strong>
-                      {participant.userId === tournament.ownerId
+                      {participant.userId === activeTournament.ownerId
                         ? 'Owner'
                         : 'Participant'}
+                      {participant.userId === currentUser?.id ? ' · You' : ''}
                     </strong>
                   </p>
 
@@ -660,7 +746,34 @@ export function TournamentPage() {
                 </div>
               ))}
             </div>
+
+            {isParticipant && !isOwner ? (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '16px',
+                  borderRadius: '16px',
+                  background: '#eef3fb',
+                }}
+              >
+                <p style={{ margin: 0 }}>
+                  <strong>You joined this tournament</strong>
+                </p>
+              </div>
+            ) : null}
           </div>
+
+          {canJoin ? (
+            <button
+              className="create-button"
+              disabled={isJoining}
+              onClick={() => {
+                void handleJoin()
+              }}
+            >
+              {isJoining ? 'Joining...' : 'Join Tournament'}
+            </button>
+          ) : null}
 
           <button
             className="create-button"
