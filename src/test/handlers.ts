@@ -194,6 +194,23 @@ export const handlers = [
 
     return successResponse(true)
   }),
+  http.get(`${API_BASE_URL}/tournaments`, ({ request }) => {
+    const authorization = request.headers.get('authorization')
+
+    if (authorization !== `Bearer ${mockAuthState.accessToken}`) {
+      return errorResponse(['Unauthorized'], 401, 'Unauthorized')
+    }
+
+    return successResponse({
+      items: [
+        {
+          ...mockTournamentState,
+          participantCount: mockTournamentState.participants.length,
+        },
+      ],
+      totalCount: 1,
+    })
+  }),
   http.get(`${API_BASE_URL}/tournaments/:tournamentId/full`, ({ request }) => {
     const authorization = request.headers.get('authorization')
 
@@ -204,6 +221,18 @@ export const handlers = [
     fullTournamentRequestCount += 1
 
     return successResponse(mockTournamentState)
+  }),
+  http.get(`${API_BASE_URL}/tournaments/:tournamentId`, ({ request }) => {
+    const authorization = request.headers.get('authorization')
+
+    if (authorization !== `Bearer ${mockAuthState.accessToken}`) {
+      return errorResponse(['Unauthorized'], 401, 'Unauthorized')
+    }
+
+    return successResponse({
+      ...mockTournamentState,
+      participantCount: mockTournamentState.participants.length,
+    })
   }),
   http.post(`${API_BASE_URL}/rounds/:roundId/submissions`, async ({ request }) => {
     const authorization = request.headers.get('authorization')
