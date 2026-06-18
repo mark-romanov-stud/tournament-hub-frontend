@@ -96,6 +96,23 @@ test.describe('local backend tournament realtime flow', () => {
       }
     })
 
+    await page.route('**/api/v1/tournaments', (route) => {
+      if (route.request().method() !== 'GET') {
+        return route.continue()
+      }
+
+      return route.fulfill({
+        contentType: 'application/json',
+        status: 200,
+        body: JSON.stringify({
+          code: 200,
+          data: { items: [], totalCount: 0 },
+          error: null,
+          message: ['success'],
+        }),
+      })
+    })
+
     await page.goto('/register')
     await attachScreenshot(page, testInfo, '01-register-page')
     await expectVisualSnapshot(page, '01-register-page')

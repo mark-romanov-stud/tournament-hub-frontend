@@ -307,4 +307,129 @@ describe('TournamentPage realtime flow', () => {
       }),
     ).toBeVisible()
   })
+
+  it('shows one revealed submission, saves a vote, advances sequentially, and blocks self-voting', async () => {
+    const roundId = '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5'
+    const firstSubmissionId = '8f2c604f-0adc-418a-93f1-67e3c74be770'
+    const secondSubmissionId = '1a676334-577e-40ee-a8ea-a468598fbdef'
+
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      status: 'ACTIVE',
+      participants: [
+        ...DEFAULT_TOURNAMENT_STATE.participants,
+        { userId: 'participant-2', cumulativeScore: 0 },
+      ],
+      currentRound: {
+        id: roundId,
+        number: 1,
+        phase: 'SUBMISSION',
+        prompt: {
+          key: 'alien_impress',
+          type: 'TEXT',
+          content: 'The best way to impress an alien visiting Earth.',
+        },
+        submissionDeadline: new Date(Date.now() - 1_000).toISOString(),
+        submissionClosedAt: new Date().toISOString(),
+        votingDeadline: null,
+      },
+    })
+
+    const { user } = renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+
+    expect(
+      await screen.findByRole('heading', { name: /round 1 submission/i }),
+    ).toBeVisible()
+
+    act(() => {
+      fakeSocket.trigger('voting:submission_revealed', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId,
+        submission: {
+          id: firstSubmissionId,
+          authorId: 'participant-2',
+          content: 'First revealed answer',
+          submittedAt: new Date().toISOString(),
+        },
+        revealIndex: 0,
+        totalSubmissions: 2,
+        votingDeadline: new Date(Date.now() + 30_000).toISOString(),
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(await screen.findByText('First revealed answer')).toBeVisible()
+    expect(screen.getByText('Submission 1 of 2')).toBeVisible()
+    expect(screen.getByTestId('voting-countdown')).toHaveTextContent(/seconds remaining/i)
+    expect(screen.queryByText('Second revealed answer')).not.toBeInTheDocument()
+
+    act(() => {
+      fakeSocket.trigger('vote:progress_updated', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId,
+        submissionId: firstSubmissionId,
+        votedCount: 1,
+        totalEligibleActiveVoters: 2,
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(screen.getByTestId('vote-progress')).toHaveTextContent(
+      '1 of 2 active voters responded',
+    )
+    await user.click(screen.getByRole('button', { name: /^like$/i }))
+    expect(await screen.findByText(/your like was saved/i)).toBeVisible()
+
+    act(() => {
+      fakeSocket.trigger('vote:finalized', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId,
+        submissionId: firstSubmissionId,
+        likeCount: 1,
+        dislikeCount: 1,
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(screen.getByTestId('vote-finalized-result')).toHaveTextContent(
+      '1 likes and 1 dislikes',
+    )
+
+    act(() => {
+      fakeSocket.trigger('voting:submission_revealed', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId,
+        submission: {
+          id: secondSubmissionId,
+          authorId: DEFAULT_AUTH_STATE.user.id,
+          content: 'Second revealed answer',
+          submittedAt: new Date().toISOString(),
+        },
+        revealIndex: 1,
+        totalSubmissions: 2,
+        votingDeadline: new Date(Date.now() + 30_000).toISOString(),
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(await screen.findByText('Second revealed answer')).toBeVisible()
+    expect(screen.queryByText('First revealed answer')).not.toBeInTheDocument()
+    expect(screen.getByText('Submission 2 of 2')).toBeVisible()
+    expect(screen.getByText(/self-voting is disabled/i)).toBeVisible()
+    expect(screen.getByRole('button', { name: /^like$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^dislike$/i })).toBeDisabled()
+
+    act(() => {
+      fakeSocket.trigger('round:completed', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId,
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: /round 1 voting finished/i }),
+    ).toBeVisible()
+    expect(screen.queryByText('Second revealed answer')).not.toBeInTheDocument()
+  })
 })

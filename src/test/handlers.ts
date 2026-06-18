@@ -251,4 +251,26 @@ export const handlers = [
       submittedAt: new Date().toISOString(),
     })
   }),
+  http.post(`${API_BASE_URL}/rounds/:roundId/votes`, async ({ request, params }) => {
+    const authorization = request.headers.get('authorization')
+
+    if (authorization !== `Bearer ${mockAuthState.accessToken}`) {
+      return errorResponse(['Unauthorized'], 401, 'Unauthorized')
+    }
+
+    const body = (await request.json()) as {
+      submissionId?: string
+      value?: 'LIKE' | 'DISLIKE'
+    }
+
+    return successResponse({
+      id: 'vote-1',
+      roundId: String(params.roundId),
+      submissionId: body.submissionId ?? '',
+      voterId: mockAuthState.user.id,
+      value: body.value ?? 'LIKE',
+      source: 'MANUAL',
+      votedAt: new Date().toISOString(),
+    })
+  }),
 ]

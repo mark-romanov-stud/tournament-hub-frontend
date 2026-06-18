@@ -438,6 +438,8 @@
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
+  justify-content: center;
+  min-width: 168px;
   min-height: 36px;
   padding: 0 12px;
   color: #0f513f;
@@ -544,6 +546,108 @@
   color: #0f7b5b;
 }
 
+.voting-panel {
+  gap: 16px;
+}
+
+.voting-step-progress {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.voting-step-progress strong {
+  color: var(--text-main);
+  font-size: 15px;
+}
+
+.voting-submission {
+  display: grid;
+  gap: 10px;
+  min-height: 132px;
+  padding: 20px;
+  border: 1px solid #cfdbea;
+  border-left: 4px solid var(--brand);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.voting-submission p:not(.tournament-prompt-label) {
+  color: var(--text-main);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.voting-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.vote-button {
+  min-height: 48px;
+  padding: 0 18px;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid;
+  border-radius: 8px;
+}
+
+.vote-button-like {
+  color: #0f7b5b;
+  border-color: #8ed6bd;
+}
+
+.vote-button-like:hover:not(:disabled),
+.vote-button-like.is-selected {
+  color: #fff;
+  background: #0f7b5b;
+  border-color: #0f7b5b;
+}
+
+.vote-button-dislike {
+  color: #b42318;
+  border-color: #f1aaa4;
+}
+
+.vote-button-dislike:hover:not(:disabled),
+.vote-button-dislike.is-selected {
+  color: #fff;
+  background: #b42318;
+  border-color: #b42318;
+}
+
+.vote-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.voting-self-note,
+.voting-finalized {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 8px;
+}
+
+.tournament-phase-panel .voting-self-note {
+  color: #854d0e;
+  background: #fff8db;
+  border: 1px solid #f1d77a;
+}
+
+.tournament-phase-panel .voting-finalized {
+  color: #174ea6;
+  background: #edf4ff;
+  border: 1px solid #bfd3f5;
+}
+
 @media (width < 760px) {
   .create-tournament-page {
     padding-bottom: 96px;
@@ -590,7 +694,8 @@
   }
 
   .tournament-phase-header,
-  .submission-progress-copy {
+  .submission-progress-copy,
+  .voting-step-progress {
     display: grid;
   }
 
@@ -598,6 +703,10 @@
   .submission-form .create-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .voting-actions {
+    grid-template-columns: 1fr;
   }
 
   .bottom-nav {

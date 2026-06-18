@@ -298,8 +298,57 @@ test.describe('local backend submission phase UI', () => {
     await expect(ownerPage.getByRole('button', { name: /submit response/i })).toHaveCount(
       0,
     )
+    await expect(ownerPage.getByTestId('revealed-submission')).toContainText(
+      participantSubmission,
+    )
+    await expect(ownerPage.getByText('Submission 1 of 2')).toBeVisible()
+    await expect(ownerPage.getByTestId('voting-countdown')).toContainText(
+      /seconds remaining/i,
+    )
+    await expect(ownerPage.getByTestId('vote-progress')).toContainText(
+      /waiting for active voter responses/i,
+    )
     await attachScreenshot(ownerPage, testInfo, '05-owner-voting-after-transition')
-    await expectPhasePanelSnapshot(ownerPage, '05-owner-voting-after-transition-panel')
+    await expectPhasePanelSnapshot(ownerPage, '05-owner-voting-after-transition-panel', [
+      ownerPage.getByTestId('voting-countdown'),
+    ])
+
+    await expect(participantPage.getByTestId('revealed-submission')).toContainText(
+      participantSubmission,
+    )
+    await expect(participantPage.getByText(/self-voting is disabled/i)).toBeVisible()
+    await expect(participantPage.getByRole('button', { name: /^like$/i })).toBeDisabled()
+    await expect(
+      participantPage.getByRole('button', { name: /^dislike$/i }),
+    ).toBeDisabled()
+    await attachScreenshot(participantPage, testInfo, '06-author-self-vote-blocked')
+    await expectPhasePanelSnapshot(participantPage, '06-author-self-vote-blocked-panel', [
+      participantPage.getByTestId('voting-countdown'),
+    ])
+
+    await ownerPage.getByRole('button', { name: /^like$/i }).click()
+
+    await expect(participantPage.getByTestId('revealed-submission')).toContainText(
+      'Owner answer that completes the active submission set.',
+    )
+    await expect(participantPage.getByText('Submission 2 of 2')).toBeVisible()
+    await expect(participantPage.getByRole('button', { name: /^like$/i })).toBeEnabled()
+    await expect(
+      participantPage.getByRole('button', { name: /^dislike$/i }),
+    ).toBeEnabled()
+    await expect(ownerPage.getByText(/self-voting is disabled/i)).toBeVisible()
+    await attachScreenshot(participantPage, testInfo, '07-next-submission-revealed')
+    await expectPhasePanelSnapshot(participantPage, '07-next-submission-revealed-panel', [
+      participantPage.getByTestId('voting-countdown'),
+    ])
+
+    await participantPage.getByRole('button', { name: /^dislike$/i }).click()
+
+    await expect(
+      participantPage.getByRole('heading', { name: /round 1 voting finished/i }),
+    ).toBeVisible()
+    await attachScreenshot(participantPage, testInfo, '08-sequential-voting-finished')
+    await expectPhasePanelSnapshot(participantPage, '08-sequential-voting-finished-panel')
 
     await participantSession.context.close()
     await ownerSession.context.close()

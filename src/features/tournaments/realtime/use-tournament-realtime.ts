@@ -41,9 +41,11 @@ export function useTournamentRealtime(tournamentId: string | undefined) {
   const [connectionStatus, setConnectionStatus] =
     useState<TournamentConnectionStatus>('idle')
   const [lastEvent, setLastEvent] = useState<TournamentRealtimeEvent | null>(null)
+  const [recentEvents, setRecentEvents] = useState<TournamentRealtimeEvent[]>([])
   const [lastRecoveredAt, setLastRecoveredAt] = useState<string | null>(null)
   const accessTokenRef = useRef(accessToken)
   const hasConnectedRef = useRef(false)
+  const nextEventSequenceRef = useRef(1)
 
   useEffect(() => {
     accessTokenRef.current = accessToken
@@ -97,7 +99,15 @@ export function useTournamentRealtime(tournamentId: string | undefined) {
 
     for (const eventName of tournamentServerEvents) {
       socket.on(eventName, (payload: unknown) => {
-        setLastEvent({ name: eventName, payload })
+        const event = {
+          name: eventName,
+          payload,
+          sequence: nextEventSequenceRef.current,
+        }
+
+        nextEventSequenceRef.current += 1
+        setLastEvent(event)
+        setRecentEvents((events) => [...events, event].slice(-50))
       })
     }
 
@@ -123,5 +133,6 @@ export function useTournamentRealtime(tournamentId: string | undefined) {
     connectionStatus,
     lastRecoveredAt,
     lastEvent,
+    recentEvents,
   }
 }

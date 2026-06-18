@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useReducer, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAppSelector } from '@/app/providers/store'
@@ -6,11 +6,13 @@ import {
   type FullTournament,
   type RoundPromptContent,
   type TournamentParticipant,
+  type TournamentVoteValue,
   useGetFullTournamentQuery,
   useGetTournamentQuery,
   useJoinTournamentMutation,
   useLeaveTournamentMutation,
   useUpsertRoundSubmissionMutation,
+  useUpsertRoundVoteMutation,
 } from '@/features/auth/api/tournaments-api'
 import type { TournamentRealtimeEvent } from '@/features/tournaments/realtime/tournament-realtime'
 import type { TournamentConnectionStatus } from '@/features/tournaments/realtime/use-tournament-realtime'
@@ -112,7 +114,60 @@ interface RoundPhaseChangedPayload {
 interface VotingSubmissionRevealedPayload {
   tournamentId: string
   roundId: string
+  submission: {
+    id: string
+    authorId: string
+    content: string
+    submittedAt: string
+  }
+  revealIndex: number
+  totalSubmissions: number
   votingDeadline: string
+  occurredAt: string
+}
+
+interface VoteProgressUpdatedPayload {
+  tournamentId: string
+  roundId: string
+  submissionId: string
+  votedCount: number
+  totalEligibleActiveVoters: number
+  occurredAt: string
+}
+
+interface VoteFinalizedPayload {
+  tournamentId: string
+  roundId: string
+  submissionId: string
+  likeCount: number
+  dislikeCount: number
+  occurredAt: string
+}
+
+interface RoundCompletedPayload {
+  tournamentId: string
+  roundId: string
+  occurredAt: string
+}
+
+interface SequentialVotingState {
+  currentReveal: VotingSubmissionRevealedPayload | null
+  finalizedResult: VoteFinalizedPayload | null
+  progress: VoteProgressUpdatedPayload | null
+  savedVote: TournamentVoteValue | null
+  status: 'waiting' | 'open' | 'finalized' | 'complete'
+}
+
+type SequentialVotingAction =
+  | { type: 'event'; event: TournamentRealtimeEvent; roundId: string }
+  | { type: 'voteSaved'; submissionId: string; value: TournamentVoteValue }
+
+const initialSequentialVotingState: SequentialVotingState = {
+  currentReveal: null,
+  finalizedResult: null,
+  progress: null,
+  savedVote: null,
+  status: 'waiting',
 }
 
 const emptyParticipants: TournamentParticipant[] = []
@@ -209,12 +264,15 @@ function TournamentRealtimePanel({
   )
 }
 
-function getApiErrorMessage(error: unknown) {
+function getApiErrorMessage(
+  error: unknown,
+  fallback = 'The request failed. Please try again.',
+) {
   if (typeof error === 'object' && error !== null && 'data' in error) {
     const data = (error as { data?: { message?: string[] | string } }).data
 
     if (Array.isArray(data?.message) && data.message.length > 0) {
-      return data.message[0] ?? 'Failed to join tournament. Please try again.'
+      return data.message[0] ?? fallback
     }
 
     if (typeof data?.message === 'string') {
@@ -222,7 +280,7 @@ function getApiErrorMessage(error: unknown) {
     }
   }
 
-  return 'Failed to join tournament. Please try again.'
+  return fallback
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -297,6 +355,91 @@ function tournamentParticipantViewReducer(
   }
 }
 
+function sequentialVotingReducer(
+  state: SequentialVotingState,
+  action: SequentialVotingAction,
+): SequentialVotingState {
+  if (action.type === 'voteSaved') {
+    if (state.currentReveal?.submission.id !== action.submissionId) {
+      return state
+    }
+
+    return {
+      ...state,
+      savedVote: action.value,
+    }
+  }
+
+  const { event, roundId } = action
+
+  if (event.name === 'voting:submission_revealed') {
+    const payload = event.payload
+
+    if (!isVotingSubmissionRevealedPayload(payload) || payload.roundId !== roundId) {
+      return state
+    }
+
+    return {
+      currentReveal: payload,
+      finalizedResult: null,
+      progress: null,
+      savedVote: null,
+      status: 'open',
+    }
+  }
+
+  if (event.name === 'vote:progress_updated') {
+    const payload = event.payload
+
+    if (
+      !isVoteProgressUpdatedPayload(payload) ||
+      payload.roundId !== roundId ||
+      payload.submissionId !== state.currentReveal?.submission.id
+    ) {
+      return state
+    }
+
+    return {
+      ...state,
+      progress: payload,
+    }
+  }
+
+  if (event.name === 'vote:finalized') {
+    const payload = event.payload
+
+    if (
+      !isVoteFinalizedPayload(payload) ||
+      payload.roundId !== roundId ||
+      payload.submissionId !== state.currentReveal?.submission.id
+    ) {
+      return state
+    }
+
+    return {
+      ...state,
+      finalizedResult: payload,
+      status: 'finalized',
+    }
+  }
+
+  if (event.name === 'round:completed') {
+    const payload = event.payload
+
+    if (!isRoundCompletedPayload(payload) || payload.roundId !== roundId) {
+      return state
+    }
+
+    return {
+      ...state,
+      currentReveal: null,
+      status: 'complete',
+    }
+  }
+
+  return state
+}
+
 function isRoundCreatedPayload(payload: unknown): payload is RoundCreatedPayload {
   return (
     isRecord(payload) &&
@@ -341,7 +484,50 @@ function isVotingSubmissionRevealedPayload(
     isRecord(payload) &&
     typeof payload.tournamentId === 'string' &&
     typeof payload.roundId === 'string' &&
-    typeof payload.votingDeadline === 'string'
+    isRecord(payload.submission) &&
+    typeof payload.submission.id === 'string' &&
+    typeof payload.submission.authorId === 'string' &&
+    typeof payload.submission.content === 'string' &&
+    typeof payload.submission.submittedAt === 'string' &&
+    typeof payload.revealIndex === 'number' &&
+    typeof payload.totalSubmissions === 'number' &&
+    typeof payload.votingDeadline === 'string' &&
+    typeof payload.occurredAt === 'string'
+  )
+}
+
+function isVoteProgressUpdatedPayload(
+  payload: unknown,
+): payload is VoteProgressUpdatedPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    typeof payload.submissionId === 'string' &&
+    typeof payload.votedCount === 'number' &&
+    typeof payload.totalEligibleActiveVoters === 'number' &&
+    typeof payload.occurredAt === 'string'
+  )
+}
+
+function isVoteFinalizedPayload(payload: unknown): payload is VoteFinalizedPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    typeof payload.submissionId === 'string' &&
+    typeof payload.likeCount === 'number' &&
+    typeof payload.dislikeCount === 'number' &&
+    typeof payload.occurredAt === 'string'
+  )
+}
+
+function isRoundCompletedPayload(payload: unknown): payload is RoundCompletedPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    typeof payload.occurredAt === 'string'
   )
 }
 
@@ -402,11 +588,15 @@ function useRemainingSeconds(deadline: string | null) {
 }
 
 function TournamentRoundPhasePanel({
+  currentUserId,
   tournament,
   lastEvent,
+  recentEvents,
 }: {
+  currentUserId: string | undefined
   tournament: FullTournament
   lastEvent: TournamentRealtimeEvent | null
+  recentEvents: TournamentRealtimeEvent[]
 }) {
   const [viewState, dispatch] = useReducer(
     tournamentRoundViewReducer,
@@ -488,12 +678,32 @@ function TournamentRoundPhasePanel({
   }, [lastEvent, tournament.id, tournament.participants.length])
 
   let currentRound = viewState.createdRound ?? tournament.currentRound
+  const latestVotingReveal = [...recentEvents].reverse().find((event) => {
+    return (
+      event.name === 'voting:submission_revealed' &&
+      isVotingSubmissionRevealedPayload(event.payload) &&
+      event.payload.tournamentId === tournament.id &&
+      event.payload.roundId === currentRound?.id
+    )
+  })
 
   if (currentRound && viewState.phaseOverride?.roundId === currentRound.id) {
     currentRound = {
       ...currentRound,
       phase: viewState.phaseOverride.phase,
       submissionClosedAt: viewState.phaseOverride.submissionClosedAt,
+    }
+  }
+
+  if (
+    currentRound &&
+    latestVotingReveal &&
+    isVotingSubmissionRevealedPayload(latestVotingReveal.payload)
+  ) {
+    currentRound = {
+      ...currentRound,
+      phase: 'VOTING',
+      votingDeadline: latestVotingReveal.payload.votingDeadline,
     }
   }
 
@@ -517,13 +727,190 @@ function TournamentRoundPhasePanel({
   }
 
   return (
-    <section className="tournament-phase-panel" aria-live="polite">
-      <p className="tournament-phase-eyebrow">Active round</p>
-      <h3>Round {currentRound.number} Voting</h3>
-      <p>
-        The submission phase has ended. Responses will be revealed one at a time for
-        voting.
-      </p>
+    <SequentialVotingPanel
+      currentUserId={currentUserId}
+      recentEvents={recentEvents}
+      round={currentRound}
+    />
+  )
+}
+
+function SequentialVotingPanel({
+  currentUserId,
+  recentEvents,
+  round,
+}: {
+  currentUserId: string | undefined
+  recentEvents: TournamentRealtimeEvent[]
+  round: NonNullable<FullTournament['currentRound']>
+}) {
+  const [viewState, dispatch] = useReducer(
+    sequentialVotingReducer,
+    initialSequentialVotingState,
+  )
+  const processedSequenceRef = useRef(0)
+  const [upsertVote, { isLoading, error }] = useUpsertRoundVoteMutation()
+  const remainingSeconds = useRemainingSeconds(
+    viewState.currentReveal?.votingDeadline ?? round.votingDeadline,
+  )
+
+  useEffect(() => {
+    for (const event of recentEvents) {
+      if (event.sequence <= processedSequenceRef.current) {
+        continue
+      }
+
+      dispatch({ type: 'event', event, roundId: round.id })
+      processedSequenceRef.current = event.sequence
+    }
+  }, [recentEvents, round.id])
+
+  const reveal = viewState.currentReveal
+
+  if (viewState.status === 'complete') {
+    return (
+      <section className="tournament-phase-panel voting-panel" aria-live="polite">
+        <p className="tournament-phase-eyebrow">Voting complete</p>
+        <h3>Round {round.number} Voting Finished</h3>
+        <p>All revealed submissions have been finalized. Round results are next.</p>
+      </section>
+    )
+  }
+
+  if (!reveal) {
+    return (
+      <section className="tournament-phase-panel voting-panel" aria-live="polite">
+        <p className="tournament-phase-eyebrow">Active round</p>
+        <h3>Round {round.number} Voting</h3>
+        <p>Waiting for the next submission to be revealed.</p>
+      </section>
+    )
+  }
+
+  const isOwnSubmission = reveal.submission.authorId === currentUserId
+  const votedCount = viewState.progress?.votedCount ?? 0
+  const totalEligibleVoters = viewState.progress?.totalEligibleActiveVoters ?? 0
+  const voteProgressPercent =
+    totalEligibleVoters > 0
+      ? Math.min(100, Math.round((votedCount / totalEligibleVoters) * 100))
+      : 0
+  const votingClosed =
+    viewState.status !== 'open' || remainingSeconds <= 0 || isOwnSubmission
+
+  const handleVote = async (value: TournamentVoteValue) => {
+    try {
+      await upsertVote({
+        roundId: round.id,
+        submissionId: reveal.submission.id,
+        value,
+      }).unwrap()
+      dispatch({
+        type: 'voteSaved',
+        submissionId: reveal.submission.id,
+        value,
+      })
+    } catch {
+      // RTK Query exposes the error state rendered below.
+    }
+  }
+
+  return (
+    <section
+      className="tournament-phase-panel voting-panel"
+      aria-live="polite"
+      data-testid="sequential-voting-panel"
+    >
+      <div className="tournament-phase-header">
+        <div>
+          <p className="tournament-phase-eyebrow">Sequential voting</p>
+          <h3>Round {round.number} Voting</h3>
+        </div>
+        <span className="tournament-phase-badge" data-testid="voting-countdown">
+          {remainingSeconds} seconds remaining
+        </span>
+      </div>
+
+      <div className="voting-step-progress">
+        <strong>
+          Submission {reveal.revealIndex + 1} of {reveal.totalSubmissions}
+        </strong>
+        <span>One submission is revealed at a time.</span>
+      </div>
+
+      <article className="voting-submission" data-testid="revealed-submission">
+        <p className="tournament-prompt-label">Revealed submission</p>
+        <p>{reveal.submission.content}</p>
+      </article>
+
+      <div className="submission-progress" data-testid="vote-progress">
+        <div className="submission-progress-copy">
+          <strong>
+            {viewState.progress
+              ? `${votedCount} of ${totalEligibleVoters} active voters responded`
+              : 'Waiting for active voter responses'}
+          </strong>
+          <span className="submission-progress-note">
+            The author is excluded from eligible voters.
+          </span>
+        </div>
+        <div
+          className="submission-progress-track"
+          role="progressbar"
+          aria-label="Voting progress"
+          aria-valuemin={0}
+          aria-valuemax={totalEligibleVoters}
+          aria-valuenow={votedCount}
+        >
+          <span
+            className="submission-progress-fill"
+            style={{ width: `${voteProgressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {isOwnSubmission ? (
+        <p className="voting-self-note">
+          This is your submission. Self-voting is disabled.
+        </p>
+      ) : null}
+
+      {viewState.finalizedResult ? (
+        <p className="voting-finalized" data-testid="vote-finalized-result">
+          Finalized: {viewState.finalizedResult.likeCount} likes and{' '}
+          {viewState.finalizedResult.dislikeCount} dislikes. Loading next submission...
+        </p>
+      ) : null}
+
+      {viewState.savedVote ? (
+        <p className="submission-saved">
+          Your {viewState.savedVote === 'LIKE' ? 'like' : 'dislike'} was saved.
+        </p>
+      ) : null}
+
+      {error ? <p className="form-error">{getApiErrorMessage(error)}</p> : null}
+
+      <div className="voting-actions">
+        <button
+          className={`vote-button vote-button-like${viewState.savedVote === 'LIKE' ? ' is-selected' : ''}`}
+          disabled={votingClosed || isLoading}
+          type="button"
+          onClick={() => {
+            void handleVote('LIKE')
+          }}
+        >
+          {isLoading ? 'Saving...' : 'Like'}
+        </button>
+        <button
+          className={`vote-button vote-button-dislike${viewState.savedVote === 'DISLIKE' ? ' is-selected' : ''}`}
+          disabled={votingClosed || isLoading}
+          type="button"
+          onClick={() => {
+            void handleVote('DISLIKE')
+          }}
+        >
+          {isLoading ? 'Saving...' : 'Dislike'}
+        </button>
+      </div>
     </section>
   )
 }
@@ -712,9 +1099,8 @@ export function TournamentPage() {
   )
   const canAccessRealtimeRoom = Boolean(tournamentId && (isOwner || isParticipant))
 
-  const { connectionStatus, lastEvent, lastRecoveredAt } = useTournamentRealtime(
-    canAccessRealtimeRoom ? tournamentId : undefined,
-  )
+  const { connectionStatus, lastEvent, lastRecoveredAt, recentEvents } =
+    useTournamentRealtime(canAccessRealtimeRoom ? tournamentId : undefined)
 
   const [joinTournament, { isLoading: isJoining, error: joinError }] =
     useJoinTournamentMutation()
@@ -831,8 +1217,10 @@ export function TournamentPage() {
 
               <TournamentRoundPhasePanel
                 key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+                currentUserId={currentUser?.id}
                 tournament={fullTournament}
                 lastEvent={lastEvent}
+                recentEvents={recentEvents}
               />
             </>
           ) : null}
