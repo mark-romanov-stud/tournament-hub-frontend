@@ -82,6 +82,24 @@ export interface RoundSubmission {
   submittedAt?: string
 }
 
+export type TournamentVoteValue = 'LIKE' | 'DISLIKE'
+
+export interface UpsertRoundVoteInput {
+  roundId: string
+  submissionId: string
+  value: TournamentVoteValue
+}
+
+export interface RoundVote {
+  id: string
+  roundId: string
+  submissionId: string
+  voterId: string
+  value: TournamentVoteValue
+  source: string
+  votedAt: string
+}
+
 function mapVisibilityToApi(visibility: TournamentVisibility): ApiTournamentVisibility {
   return visibility === 'public' ? 'PUBLIC' : 'PRIVATE'
 }
@@ -154,6 +172,15 @@ export const tournamentsApi = authApi.injectEndpoints({
       transformResponse: (response: { data: RoundSubmission }) => response.data,
     }),
 
+    upsertRoundVote: builder.mutation<RoundVote, UpsertRoundVoteInput>({
+      query: ({ roundId, submissionId, value }) => ({
+        url: `/rounds/${roundId}/votes`,
+        method: 'POST',
+        body: { submissionId, value },
+      }),
+      transformResponse: (response: { data: RoundVote }) => response.data,
+    }),
+
     joinTournament: builder.mutation<boolean, JoinTournamentInput>({
       query: ({ tournamentId, inviteToken }) => ({
         url: `/tournaments/${tournamentId}/join`,
@@ -181,5 +208,6 @@ export const {
   useJoinTournamentMutation,
   useLeaveTournamentMutation,
   useLazyGetFullTournamentQuery,
+  useUpsertRoundVoteMutation,
   useUpsertRoundSubmissionMutation,
 } = tournamentsApi

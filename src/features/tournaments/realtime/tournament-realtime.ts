@@ -24,4 +24,5 @@ export type TournamentServerEventName = (typeof tournamentServerEvents)[number]
 export interface TournamentRealtimeEvent {
   name: TournamentServerEventName
   payload: unknown
+  sequence: number
 }
