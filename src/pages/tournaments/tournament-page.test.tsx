@@ -252,4 +252,59 @@ describe('TournamentPage realtime flow', () => {
       screen.queryByRole('button', { name: /submit response/i }),
     ).not.toBeInTheDocument()
   })
+
+  it('updates draft participants and counts from realtime join and leave events', async () => {
+    renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+
+    expect(await screen.findByText(DEFAULT_AUTH_STATE.user.id)).toBeVisible()
+    expect(
+      screen.getByText((_content, element) => {
+        return element?.textContent === 'Participant count: 1'
+      }),
+    ).toBeVisible()
+
+    act(() => {
+      fakeSocket.trigger('tournament:participant_joined', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        userId: 'participant-2',
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(await screen.findByText('participant-2')).toBeVisible()
+    expect(
+      screen.getByText((_content, element) => {
+        return element?.textContent === 'Participant count: 2'
+      }),
+    ).toBeVisible()
+
+    act(() => {
+      fakeSocket.trigger('tournament:presence_updated', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        activeCount: 2,
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(
+      screen.getByText((_content, element) => {
+        return element?.textContent === 'Active users: 2'
+      }),
+    ).toBeVisible()
+
+    act(() => {
+      fakeSocket.trigger('tournament:participant_left', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        userId: 'participant-2',
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(screen.queryByText('participant-2')).not.toBeInTheDocument()
+    expect(
+      screen.getByText((_content, element) => {
+        return element?.textContent === 'Participant count: 1'
+      }),
+    ).toBeVisible()
+  })
 })
