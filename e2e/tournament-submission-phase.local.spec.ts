@@ -71,10 +71,23 @@ async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[
     }
   })
 
-  await expect(page.locator('.tournament-phase-panel')).toHaveScreenshot(`${name}.png`, {
-    animations: 'disabled',
-    mask,
+  const snapshotStyle = await page.addStyleTag({
+    content: '.tournament-prompt { height: 132px; overflow: hidden; }',
   })
+
+  try {
+    await expect(page.locator('.tournament-phase-panel')).toHaveScreenshot(
+      `${name}.png`,
+      {
+        animations: 'disabled',
+        mask,
+      },
+    )
+  } finally {
+    await snapshotStyle.evaluate((element) => {
+      element.remove()
+    })
+  }
 }
 
 async function registerUser(runId: string, index: number): Promise<TestUser> {
@@ -349,6 +362,42 @@ test.describe('local backend submission phase UI', () => {
     ).toBeVisible()
     await attachScreenshot(participantPage, testInfo, '08-sequential-voting-finished')
     await expectPhasePanelSnapshot(participantPage, '08-sequential-voting-finished-panel')
+
+    await expect(
+      participantPage.getByRole('heading', { name: /round 1 results/i }),
+    ).toBeVisible()
+    await expect(participantPage.getByTestId('live-leaderboard')).toBeVisible()
+    await expect(
+      participantPage.getByRole('heading', { name: /round 2 submission/i }),
+    ).toBeVisible()
+    await attachScreenshot(
+      participantPage,
+      testInfo,
+      '09-round-results-leaderboard-and-next-round',
+    )
+    const resultsSnapshotStyle = await participantPage.addStyleTag({
+      content: `
+        .live-results-panel { height: 860px; overflow: hidden; }
+        .result-identity { height: 112px; overflow: hidden; }
+      `,
+    })
+
+    try {
+      await expect(participantPage.locator('.live-results-panel')).toHaveScreenshot(
+        '09-round-results-and-leaderboard-panel.png',
+        {
+          animations: 'disabled',
+          mask: [
+            participantPage.locator('.result-identity'),
+            participantPage.locator('.leaderboard-row strong'),
+          ],
+        },
+      )
+    } finally {
+      await resultsSnapshotStyle.evaluate((element) => {
+        element.remove()
+      })
+    }
 
     await participantSession.context.close()
     await ownerSession.context.close()

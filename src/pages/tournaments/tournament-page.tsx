@@ -147,6 +147,33 @@ interface VoteFinalizedPayload {
 interface RoundCompletedPayload {
   tournamentId: string
   roundId: string
+  roundNumber: number
+  rankings: RoundRanking[]
+  leaderboard: LeaderboardEntry[]
+  nextRoundNumber: number | null
+  isLastRound: boolean
+  occurredAt: string
+}
+
+interface RoundRanking {
+  submissionId: string
+  authorId: string
+  likeCount: number
+  dislikeCount: number
+  score: number
+}
+
+interface LeaderboardEntry {
+  userId: string
+  cumulativeScore: number
+  rank: number
+}
+
+interface TournamentFinishedPayload {
+  tournamentId: string
+  status: 'COMPLETED'
+  overallWinnerId: string | null
+  finalLeaderboard: LeaderboardEntry[]
   occurredAt: string
 }
 
@@ -426,7 +453,7 @@ function sequentialVotingReducer(
   if (event.name === 'round:completed') {
     const payload = event.payload
 
-    if (!isRoundCompletedPayload(payload) || payload.roundId !== roundId) {
+    if (!isRoundCompletionSignal(payload) || payload.roundId !== roundId) {
       return state
     }
 
@@ -438,6 +465,17 @@ function sequentialVotingReducer(
   }
 
   return state
+}
+
+function isRoundCompletionSignal(
+  payload: unknown,
+): payload is Pick<RoundCompletedPayload, 'occurredAt' | 'roundId' | 'tournamentId'> {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    typeof payload.roundId === 'string' &&
+    typeof payload.occurredAt === 'string'
+  )
 }
 
 function isRoundCreatedPayload(payload: unknown): payload is RoundCreatedPayload {
@@ -527,6 +565,47 @@ function isRoundCompletedPayload(payload: unknown): payload is RoundCompletedPay
     isRecord(payload) &&
     typeof payload.tournamentId === 'string' &&
     typeof payload.roundId === 'string' &&
+    typeof payload.roundNumber === 'number' &&
+    Array.isArray(payload.rankings) &&
+    payload.rankings.every(isRoundRanking) &&
+    Array.isArray(payload.leaderboard) &&
+    payload.leaderboard.every(isLeaderboardEntry) &&
+    (typeof payload.nextRoundNumber === 'number' || payload.nextRoundNumber === null) &&
+    typeof payload.isLastRound === 'boolean' &&
+    typeof payload.occurredAt === 'string'
+  )
+}
+
+function isRoundRanking(value: unknown): value is RoundRanking {
+  return (
+    isRecord(value) &&
+    typeof value.submissionId === 'string' &&
+    typeof value.authorId === 'string' &&
+    typeof value.likeCount === 'number' &&
+    typeof value.dislikeCount === 'number' &&
+    typeof value.score === 'number'
+  )
+}
+
+function isLeaderboardEntry(value: unknown): value is LeaderboardEntry {
+  return (
+    isRecord(value) &&
+    typeof value.userId === 'string' &&
+    typeof value.cumulativeScore === 'number' &&
+    typeof value.rank === 'number'
+  )
+}
+
+function isTournamentFinishedPayload(
+  payload: unknown,
+): payload is TournamentFinishedPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    payload.status === 'COMPLETED' &&
+    (typeof payload.overallWinnerId === 'string' || payload.overallWinnerId === null) &&
+    Array.isArray(payload.finalLeaderboard) &&
+    payload.finalLeaderboard.every(isLeaderboardEntry) &&
     typeof payload.occurredAt === 'string'
   )
 }
@@ -551,6 +630,11 @@ function isPresenceUpdatedPayload(payload: unknown): payload is PresenceUpdatedP
 
 function getPromptText(content: RoundPromptContent) {
   return typeof content === 'string' ? content : content.en
+}
+
+function formatPoints(points: number, showPositiveSign = false) {
+  const sign = showPositiveSign && points > 0 ? '+' : ''
+  return `${sign}${points} ${Math.abs(points) === 1 ? 'point' : 'points'}`
 }
 
 function formatDeadline(deadline: string) {
@@ -1030,6 +1114,121 @@ function SubmissionPhasePanel({
   )
 }
 
+function LiveTournamentResults({
+  currentUserId,
+  finished,
+  roundCompleted,
+}: {
+  currentUserId: string | undefined
+  finished: TournamentFinishedPayload | null
+  roundCompleted: RoundCompletedPayload | null
+}) {
+  const leaderboard = finished?.finalLeaderboard ?? roundCompleted?.leaderboard ?? []
+
+  if (!roundCompleted && !finished) {
+    return null
+  }
+
+  return (
+    <section className="live-results-panel" aria-live="polite">
+      {roundCompleted ? (
+        <div className="round-results">
+          <div className="live-results-header">
+            <div>
+              <p className="tournament-phase-eyebrow">Latest completed round</p>
+              <h3>Round {roundCompleted.roundNumber} Results</h3>
+            </div>
+            <span className="tournament-phase-badge">
+              {roundCompleted.isLastRound
+                ? 'Final round'
+                : `Round ${roundCompleted.nextRoundNumber} next`}
+            </span>
+          </div>
+
+          <div className="round-results-list">
+            {roundCompleted.rankings.map((ranking, index) => (
+              <article
+                className="round-result-row"
+                data-testid={`round-result-${ranking.submissionId}`}
+                key={ranking.submissionId}
+              >
+                <span className="result-rank">#{index + 1}</span>
+                <div className="result-identity">
+                  <strong>
+                    {ranking.authorId}
+                    {ranking.authorId === currentUserId ? ' · You' : ''}
+                  </strong>
+                  <span className="result-submission-meta">
+                    Submission {ranking.submissionId}
+                  </span>
+                </div>
+                <div className="result-votes">
+                  <span>{ranking.likeCount} likes</span>
+                  <span>{ranking.dislikeCount} dislikes</span>
+                </div>
+                <strong className="result-score">
+                  {formatPoints(ranking.score, true)}
+                </strong>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="live-leaderboard" data-testid="live-leaderboard">
+        <div className="live-results-header">
+          <div>
+            <p className="tournament-phase-eyebrow">
+              {finished ? 'Final standings' : 'Cumulative standings'}
+            </p>
+            <h3>Leaderboard</h3>
+          </div>
+        </div>
+
+        <ol className="leaderboard-list">
+          {leaderboard.map((entry) => (
+            <li className="leaderboard-row" key={entry.userId}>
+              <span className="leaderboard-rank">{entry.rank}</span>
+              <strong>
+                {entry.userId}
+                {entry.userId === currentUserId ? ' · You' : ''}
+              </strong>
+              <span>{formatPoints(entry.cumulativeScore)}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  )
+}
+
+function TournamentFinishedPanel({
+  currentUserId,
+  finished,
+}: {
+  currentUserId: string | undefined
+  finished: TournamentFinishedPayload
+}) {
+  return (
+    <section
+      className="tournament-phase-panel tournament-finished-panel"
+      aria-live="polite"
+    >
+      <p className="tournament-phase-eyebrow">All rounds completed</p>
+      <h3>Tournament Finished</h3>
+      {finished.overallWinnerId ? (
+        <p data-testid="tournament-winner">
+          Winner: <strong>{finished.overallWinnerId}</strong>
+          {finished.overallWinnerId === currentUserId ? ' · You' : ''}
+        </p>
+      ) : (
+        <p>No winner was determined.</p>
+      )}
+      <p>The final standings are available below.</p>
+    </section>
+  )
+}
+
 export function TournamentPage() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
@@ -1102,6 +1301,48 @@ export function TournamentPage() {
   const { connectionStatus, lastEvent, lastRecoveredAt, recentEvents } =
     useTournamentRealtime(canAccessRealtimeRoom ? tournamentId : undefined)
 
+  const latestRoundCompleted = useMemo(() => {
+    const event = [...recentEvents].reverse().find((candidate) => {
+      return (
+        candidate.name === 'round:completed' &&
+        isRoundCompletedPayload(candidate.payload) &&
+        candidate.payload.tournamentId === tournamentId
+      )
+    })
+
+    return event && isRoundCompletedPayload(event.payload) ? event.payload : null
+  }, [recentEvents, tournamentId])
+
+  const tournamentFinished = useMemo(() => {
+    const event = [...recentEvents].reverse().find((candidate) => {
+      return (
+        candidate.name === 'tournament:finished' &&
+        isTournamentFinishedPayload(candidate.payload) &&
+        candidate.payload.tournamentId === tournamentId
+      )
+    })
+
+    return event && isTournamentFinishedPayload(event.payload) ? event.payload : null
+  }, [recentEvents, tournamentId])
+
+  const realtimeLeaderboard =
+    tournamentFinished?.finalLeaderboard ?? latestRoundCompleted?.leaderboard
+  const scoredParticipants = useMemo(() => {
+    if (!realtimeLeaderboard) {
+      return displayedParticipants
+    }
+
+    const scoresByUserId = new Map(
+      realtimeLeaderboard.map((entry) => [entry.userId, entry.cumulativeScore]),
+    )
+
+    return displayedParticipants.map((participant) => ({
+      ...participant,
+      cumulativeScore:
+        scoresByUserId.get(participant.userId) ?? participant.cumulativeScore,
+    }))
+  }, [displayedParticipants, realtimeLeaderboard])
+
   const [joinTournament, { isLoading: isJoining, error: joinError }] =
     useJoinTournamentMutation()
 
@@ -1159,8 +1400,9 @@ export function TournamentPage() {
   }
 
   const activeTournament = tournament
-  const canJoin = tournament.status === 'DRAFT' && !isOwner && !isParticipant
-  const canLeave = tournament.status === 'DRAFT' && !isOwner && isParticipant
+  const displayedStatus = tournamentFinished?.status ?? tournament.status
+  const canJoin = displayedStatus === 'DRAFT' && !isOwner && !isParticipant
+  const canLeave = displayedStatus === 'DRAFT' && !isOwner && isParticipant
 
   const handleJoin = async () => {
     const joinPayload = draftTournament?.inviteToken
@@ -1215,12 +1457,25 @@ export function TournamentPage() {
                 lastRecoveredAt={lastRecoveredAt}
               />
 
-              <TournamentRoundPhasePanel
-                key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+              {tournamentFinished ? (
+                <TournamentFinishedPanel
+                  currentUserId={currentUser?.id}
+                  finished={tournamentFinished}
+                />
+              ) : (
+                <TournamentRoundPhasePanel
+                  key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+                  currentUserId={currentUser?.id}
+                  tournament={fullTournament}
+                  lastEvent={lastEvent}
+                  recentEvents={recentEvents}
+                />
+              )}
+
+              <LiveTournamentResults
                 currentUserId={currentUser?.id}
-                tournament={fullTournament}
-                lastEvent={lastEvent}
-                recentEvents={recentEvents}
+                finished={tournamentFinished}
+                roundCompleted={latestRoundCompleted}
               />
             </>
           ) : null}
@@ -1234,7 +1489,7 @@ export function TournamentPage() {
           ) : null}
 
           <p style={{ marginBottom: '16px' }}>
-            <strong>Status:</strong> {tournament.status}
+            <strong>Status:</strong> {displayedStatus}
           </p>
 
           <p style={{ marginBottom: '16px' }}>
@@ -1290,10 +1545,11 @@ export function TournamentPage() {
           <div style={{ marginBottom: '32px' }}>
             <h3>Participants</h3>
 
-            {displayedParticipants.length === 0 ? <p>No participants yet.</p> : null}
+            {scoredParticipants.length === 0 ? <p>No participants yet.</p> : null}
 
-            {displayedParticipants.map((participant) => (
+            {scoredParticipants.map((participant) => (
               <div
+                data-testid={`participant-${participant.userId}`}
                 key={participant.userId}
                 style={{
                   marginTop: '12px',

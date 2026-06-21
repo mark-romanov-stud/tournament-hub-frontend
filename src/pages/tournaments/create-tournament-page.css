@@ -648,6 +648,122 @@
   border: 1px solid #bfd3f5;
 }
 
+.tournament-finished-panel {
+  background: linear-gradient(135deg, #f0fdf8, #e8fff6);
+  border-color: #9be0c8;
+}
+
+.live-results-panel {
+  display: grid;
+  gap: 18px;
+  margin: 18px 0 24px;
+}
+
+.round-results,
+.live-leaderboard {
+  padding: 22px;
+  background: #fff;
+  border: 1px solid #dbe4ef;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgb(31 44 66 / 8%);
+}
+
+.live-results-header,
+.round-result-row,
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+}
+
+.live-results-header {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.live-results-header h3 {
+  margin: 3px 0 0;
+}
+
+.round-results-list,
+.leaderboard-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.round-result-row {
+  gap: 14px;
+  padding: 14px;
+  background: #f8fbff;
+  border: 1px solid #e2eaf4;
+  border-radius: 10px;
+}
+
+.result-rank,
+.leaderboard-rank {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  color: #174ea6;
+  font-weight: 900;
+  place-items: center;
+  background: #e8f0ff;
+  border-radius: 50%;
+}
+
+.result-identity {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+
+.result-identity strong,
+.result-submission-meta,
+.leaderboard-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-submission-meta,
+.result-votes {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.result-votes {
+  display: grid;
+  gap: 3px;
+  text-align: right;
+}
+
+.result-score {
+  min-width: 74px;
+  color: #0f7b5b;
+  text-align: right;
+}
+
+.leaderboard-list {
+  list-style: none;
+}
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8fbff;
+  border-radius: 10px;
+}
+
+.leaderboard-row:first-child {
+  background: #fff8db;
+  border: 1px solid #f1d77a;
+}
+
 @media (width < 760px) {
   .create-tournament-page {
     padding-bottom: 96px;
@@ -707,6 +823,28 @@
 
   .voting-actions {
     grid-template-columns: 1fr;
+  }
+
+  .live-results-header,
+  .round-result-row {
+    align-items: stretch;
+  }
+
+  .live-results-header,
+  .round-result-row,
+  .result-votes {
+    display: grid;
+    text-align: left;
+  }
+
+  .round-result-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .result-votes,
+  .result-score {
+    grid-column: 2;
+    text-align: left;
   }
 
   .bottom-nav {

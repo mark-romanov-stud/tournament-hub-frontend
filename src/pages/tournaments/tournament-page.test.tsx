@@ -432,4 +432,155 @@ describe('TournamentPage realtime flow', () => {
     ).toBeVisible()
     expect(screen.queryByText('Second revealed answer')).not.toBeInTheDocument()
   })
+
+  it('shows round rankings, updates cumulative standings, and switches to the next round from realtime events', async () => {
+    const roundId = '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5'
+    const nextRoundId = '3f8c87b0-28a4-4e83-bc57-1b22e17f5d2a'
+    const participantId = 'participant-2'
+
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      status: 'ACTIVE',
+      participants: [
+        ...DEFAULT_TOURNAMENT_STATE.participants,
+        { userId: participantId, cumulativeScore: 0 },
+      ],
+      currentRound: {
+        id: roundId,
+        number: 1,
+        phase: 'VOTING',
+        prompt: {
+          key: 'alien_impress',
+          type: 'TEXT',
+          content: 'The best way to impress an alien visiting Earth.',
+        },
+        submissionDeadline: new Date(Date.now() - 60_000).toISOString(),
+        submissionClosedAt: new Date(Date.now() - 30_000).toISOString(),
+        votingDeadline: new Date(Date.now() + 30_000).toISOString(),
+      },
+    })
+
+    renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+
+    expect(await screen.findByRole('heading', { name: /round 1 voting/i })).toBeVisible()
+
+    act(() => {
+      fakeSocket.trigger('round:completed', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId,
+        roundNumber: 1,
+        rankings: [
+          {
+            submissionId: 'submission-2',
+            authorId: participantId,
+            likeCount: 3,
+            dislikeCount: 1,
+            score: 2,
+          },
+          {
+            submissionId: 'submission-1',
+            authorId: DEFAULT_AUTH_STATE.user.id,
+            likeCount: 2,
+            dislikeCount: 2,
+            score: 0,
+          },
+        ],
+        leaderboard: [
+          { userId: participantId, cumulativeScore: 2, rank: 1 },
+          { userId: DEFAULT_AUTH_STATE.user.id, cumulativeScore: 0, rank: 2 },
+        ],
+        nextRoundNumber: 2,
+        isLastRound: false,
+        occurredAt: new Date().toISOString(),
+      })
+
+      fakeSocket.trigger('round:created', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId: nextRoundId,
+        roundNumber: 2,
+        phase: 'SUBMISSION',
+        prompt: {
+          key: 'unexpected_superpower',
+          type: 'TEXT',
+          content: 'The least useful superpower at a job interview.',
+        },
+        submissionDeadline: new Date(Date.now() + 30_000).toISOString(),
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: /round 2 submission/i }),
+    ).toBeVisible()
+    expect(
+      screen.getByText('The least useful superpower at a job interview.'),
+    ).toBeVisible()
+    expect(screen.getByRole('heading', { name: /round 1 results/i })).toBeVisible()
+    expect(screen.getByTestId('round-result-submission-2')).toHaveTextContent('3 likes')
+    expect(screen.getByTestId('round-result-submission-2')).toHaveTextContent('1 dislike')
+    expect(screen.getByTestId('round-result-submission-2')).toHaveTextContent('+2 points')
+    expect(screen.getByTestId('live-leaderboard')).toHaveTextContent(
+      `1${participantId}2 points`,
+    )
+    expect(screen.getByTestId(`participant-${participantId}`)).toHaveTextContent(
+      'Score: 2',
+    )
+  })
+
+  it('shows the final tournament state, winner, and final standings automatically', async () => {
+    const participantId = 'participant-2'
+
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      status: 'ACTIVE',
+      participants: [
+        ...DEFAULT_TOURNAMENT_STATE.participants,
+        { userId: participantId, cumulativeScore: 1 },
+      ],
+      currentRound: {
+        id: 'final-round',
+        number: 3,
+        phase: 'VOTING',
+        prompt: {
+          key: 'final_prompt',
+          type: 'TEXT',
+          content: 'The final prompt.',
+        },
+        submissionDeadline: new Date(Date.now() - 60_000).toISOString(),
+        submissionClosedAt: new Date(Date.now() - 30_000).toISOString(),
+        votingDeadline: new Date(Date.now() + 30_000).toISOString(),
+      },
+    })
+
+    renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+
+    expect(await screen.findByRole('heading', { name: /round 3 voting/i })).toBeVisible()
+
+    act(() => {
+      fakeSocket.trigger('tournament:finished', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        status: 'COMPLETED',
+        overallWinnerId: participantId,
+        finalLeaderboard: [
+          { userId: participantId, cumulativeScore: 7, rank: 1 },
+          { userId: DEFAULT_AUTH_STATE.user.id, cumulativeScore: 4, rank: 2 },
+        ],
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: /tournament finished/i }),
+    ).toBeVisible()
+    expect(screen.getByTestId('tournament-winner')).toHaveTextContent(participantId)
+    expect(screen.getByTestId('live-leaderboard')).toHaveTextContent(
+      `1${participantId}7 points`,
+    )
+    expect(screen.queryByRole('button', { name: /^like$/i })).not.toBeInTheDocument()
+    expect(
+      screen.getByText((_content, element) => {
+        return element?.textContent === 'Status: COMPLETED'
+      }),
+    ).toBeVisible()
+  })
 })
