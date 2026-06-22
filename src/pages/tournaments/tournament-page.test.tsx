@@ -212,7 +212,7 @@ describe('TournamentPage realtime flow', () => {
     expect(screen.getByText(/submissions are hidden until voting starts/i)).toBeVisible()
 
     await user.type(
-      screen.getByLabelText(/your submission/i),
+      screen.getByLabelText(/continue the phrase/i),
       'A sincere tour through human music.',
     )
     await user.click(screen.getByRole('button', { name: /submit response/i }))
@@ -252,6 +252,71 @@ describe('TournamentPage realtime flow', () => {
     expect(
       screen.queryByRole('button', { name: /submit response/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('replaces the prompt and clears the submission form when the active round changes', async () => {
+    const firstRoundId = '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5'
+    const secondRoundId = '3f8c87b0-28a4-4e83-bc57-1b22e17f5d2a'
+    const firstPrompt = 'The best way to impress an alien visiting Earth.'
+    const secondPrompt = 'The least useful superpower at a job interview.'
+
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      status: 'ACTIVE',
+      participants: [...DEFAULT_TOURNAMENT_STATE.participants],
+      currentRound: {
+        id: firstRoundId,
+        number: 1,
+        phase: 'SUBMISSION',
+        prompt: {
+          key: 'alien_impress',
+          type: 'TEXT',
+          content: firstPrompt,
+        },
+        submissionDeadline: new Date(Date.now() + 30_000).toISOString(),
+        submissionClosedAt: null,
+        votingDeadline: null,
+      },
+    })
+
+    const { user } = renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+    const submission = await screen.findByLabelText(/continue the phrase/i)
+
+    expect(screen.getByTestId('active-round-prompt')).toHaveTextContent(firstPrompt)
+    expect(screen.getByTestId('round-submission-form')).toHaveAttribute(
+      'data-round-id',
+      firstRoundId,
+    )
+
+    await user.type(submission, 'A draft for the first round.')
+    expect(submission).toHaveValue('A draft for the first round.')
+
+    act(() => {
+      fakeSocket.trigger('round:created', {
+        tournamentId: DEFAULT_TOURNAMENT_STATE.id,
+        roundId: secondRoundId,
+        roundNumber: 2,
+        phase: 'SUBMISSION',
+        prompt: {
+          key: 'unexpected_superpower',
+          type: 'TEXT',
+          content: secondPrompt,
+        },
+        submissionDeadline: new Date(Date.now() + 30_000).toISOString(),
+        occurredAt: new Date().toISOString(),
+      })
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: /round 2 submission/i }),
+    ).toBeVisible()
+    expect(screen.getByTestId('active-round-prompt')).toHaveTextContent(secondPrompt)
+    expect(screen.queryByText(firstPrompt)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/continue the phrase/i)).toHaveValue('')
+    expect(screen.getByTestId('round-submission-form')).toHaveAttribute(
+      'data-round-id',
+      secondRoundId,
+    )
   })
 
   it('updates draft participants and counts from realtime join and leave events', async () => {

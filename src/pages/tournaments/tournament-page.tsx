@@ -490,7 +490,17 @@ function isRoundCreatedPayload(payload: unknown): payload is RoundCreatedPayload
     isRecord(payload.prompt) &&
     typeof payload.prompt.key === 'string' &&
     typeof payload.prompt.type === 'string' &&
+    isRoundPromptContent(payload.prompt.content) &&
     typeof payload.submissionDeadline === 'string'
+  )
+}
+
+function isRoundPromptContent(content: unknown): content is RoundPromptContent {
+  return (
+    typeof content === 'string' ||
+    (isRecord(content) &&
+      typeof content.en === 'string' &&
+      typeof content.ru === 'string')
   )
 }
 
@@ -805,6 +815,7 @@ function TournamentRoundPhasePanel({
   if (currentRound.phase === 'SUBMISSION') {
     return (
       <SubmissionPhasePanel
+        key={currentRound.id}
         participantCount={tournament.participants.length}
         progress={viewState.progress}
         round={currentRound}
@@ -1014,6 +1025,8 @@ function SubmissionPhasePanel({
   const [isSaved, setIsSaved] = useState(false)
   const [upsertSubmission, { isLoading, isError }] = useUpsertRoundSubmissionMutation()
   const remainingSeconds = useRemainingSeconds(round.submissionDeadline)
+  const promptId = `round-prompt-${round.id}`
+  const submissionId = `round-submission-${round.id}`
   const submittedCount = progress?.roundId === round.id ? progress.submittedCount : 0
   const totalParticipants =
     progress?.roundId === round.id ? progress.totalActiveParticipants : participantCount
@@ -1052,9 +1065,12 @@ function SubmissionPhasePanel({
         </span>
       </div>
 
-      <div className="tournament-prompt">
-        <p className="tournament-prompt-label">Prompt</p>
-        <p>{getPromptText(round.prompt.content)}</p>
+      <div className="tournament-prompt" data-testid="active-round-prompt">
+        <p className="tournament-prompt-label">Phrase to continue</p>
+        <p id={promptId}>{getPromptText(round.prompt.content)}</p>
+        <span className="tournament-prompt-instruction">
+          Write the next part of this phrase in the form below.
+        </span>
         <span className="tournament-prompt-deadline">
           Deadline: {formatDeadline(round.submissionDeadline)}
         </span>
@@ -1086,21 +1102,24 @@ function SubmissionPhasePanel({
 
       <form
         className="submission-form"
+        aria-describedby={promptId}
+        data-round-id={round.id}
+        data-testid="round-submission-form"
         onSubmit={(event) => {
           void handleSubmit(event)
         }}
       >
-        <label htmlFor="round-submission">Your submission</label>
+        <label htmlFor={submissionId}>Continue the phrase</label>
         <textarea
           className="submission-form-textarea"
-          id="round-submission"
+          id={submissionId}
           maxLength={4000}
           value={content}
           onChange={(event) => {
             setContent(event.target.value)
             setIsSaved(false)
           }}
-          placeholder="Write your response before the timer ends."
+          placeholder="Write what comes next..."
         />
 
         {isError ? (
