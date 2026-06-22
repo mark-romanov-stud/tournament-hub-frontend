@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { Navigate } from 'react-router-dom'
 
 import { useAppSelector } from '@/app/providers/store'
+import { LiveTournamentRecoveryProvider } from '@/features/tournaments/live/live-tournament-recovery'
 
 function SessionGate() {
   return (
@@ -23,7 +24,7 @@ export function ProtectedRoute({ children }: { children: ReactElement }) {
     return <Navigate replace to="/login" />
   }
 
-  return children
+  return <LiveTournamentRecoveryProvider>{children}</LiveTournamentRecoveryProvider>
 }
 
 export function GuestRoute({ children }: { children: ReactElement }) {

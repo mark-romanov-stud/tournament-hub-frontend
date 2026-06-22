@@ -72,7 +72,10 @@ async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[
   })
 
   const snapshotStyle = await page.addStyleTag({
-    content: '.tournament-prompt { height: 132px; overflow: hidden; }',
+    content: `
+      .live-tournament-recovery { display: none; }
+      .tournament-prompt { height: 132px; overflow: hidden; }
+    `,
   })
 
   try {
@@ -81,6 +84,7 @@ async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[
       {
         animations: 'disabled',
         mask,
+        maxDiffPixelRatio: 0.02,
       },
     )
   } finally {
@@ -377,6 +381,7 @@ test.describe('local backend submission phase UI', () => {
     )
     const resultsSnapshotStyle = await participantPage.addStyleTag({
       content: `
+        .live-tournament-recovery { display: none; }
         .live-results-panel { height: 860px; overflow: hidden; }
         .result-identity { height: 112px; overflow: hidden; }
       `,

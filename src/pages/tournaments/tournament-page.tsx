@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { useAppSelector } from '@/app/providers/store'
+import { useAppDispatch, useAppSelector } from '@/app/providers/store'
+import { authApi } from '@/features/auth/api/auth-api'
 import {
   type FullTournament,
   type RoundPromptContent,
@@ -14,6 +15,7 @@ import {
   useUpsertRoundSubmissionMutation,
   useUpsertRoundVoteMutation,
 } from '@/features/auth/api/tournaments-api'
+import { useLiveTournamentRecovery } from '@/features/tournaments/live/live-tournament-recovery-context'
 import type { TournamentRealtimeEvent } from '@/features/tournaments/realtime/tournament-realtime'
 import type { TournamentConnectionStatus } from '@/features/tournaments/realtime/use-tournament-realtime'
 import { useTournamentRealtime } from '@/features/tournaments/realtime/use-tournament-realtime'
@@ -1232,7 +1234,9 @@ function TournamentFinishedPanel({
 export function TournamentPage() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
+  const dispatch = useAppDispatch()
   const currentUser = useAppSelector((state) => state.auth.user)
+  const { activeTournament: recoveredTournament } = useLiveTournamentRecovery()
   const [hasJoined, setHasJoined] = useState(false)
   const [participantViewState, dispatchParticipantView] = useReducer(
     tournamentParticipantViewReducer,
@@ -1325,6 +1329,23 @@ export function TournamentPage() {
     return event && isTournamentFinishedPayload(event.payload) ? event.payload : null
   }, [recentEvents, tournamentId])
 
+  useEffect(() => {
+    if (
+      !tournamentFinished ||
+      !currentUser?.id ||
+      tournamentFinished.tournamentId !== recoveredTournament?.id
+    ) {
+      return
+    }
+
+    dispatch(
+      authApi.util.updateQueryData('getLiveTournament', currentUser.id, (current) => {
+        current.hasActiveTournament = false
+        current.tournament = null
+      }),
+    )
+  }, [currentUser?.id, dispatch, recoveredTournament?.id, tournamentFinished])
+
   const realtimeLeaderboard =
     tournamentFinished?.finalLeaderboard ?? latestRoundCompleted?.leaderboard
   const scoredParticipants = useMemo(() => {
@@ -1403,6 +1424,9 @@ export function TournamentPage() {
   const displayedStatus = tournamentFinished?.status ?? tournament.status
   const canJoin = displayedStatus === 'DRAFT' && !isOwner && !isParticipant
   const canLeave = displayedStatus === 'DRAFT' && !isOwner && isParticipant
+  const hasLiveTournamentConflict = Boolean(
+    recoveredTournament && recoveredTournament.id !== tournamentId,
+  )
 
   const handleJoin = async () => {
     const joinPayload = draftTournament?.inviteToken
@@ -1580,15 +1604,23 @@ export function TournamentPage() {
           </div>
 
           {canJoin ? (
-            <button
-              className="create-button"
-              disabled={isJoining}
-              onClick={() => {
-                void handleJoin()
-              }}
-            >
-              {isJoining ? 'Joining...' : 'Join Tournament'}
-            </button>
+            <>
+              {hasLiveTournamentConflict ? (
+                <p className="live-tournament-conflict" role="alert">
+                  You are already active in another tournament. Return to that match
+                  before joining a new one.
+                </p>
+              ) : null}
+              <button
+                className="create-button"
+                disabled={isJoining || hasLiveTournamentConflict}
+                onClick={() => {
+                  void handleJoin()
+                }}
+              >
+                {isJoining ? 'Joining...' : 'Join Tournament'}
+              </button>
+            </>
           ) : null}
 
           {canLeave ? (
