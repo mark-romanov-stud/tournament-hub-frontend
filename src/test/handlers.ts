@@ -31,6 +31,23 @@ export const DEFAULT_TOURNAMENT_STATE = {
   currentRound: null,
 } as const
 
+export const DEFAULT_LIVE_TOURNAMENT_STATE = {
+  hasActiveTournament: false,
+  tournament: null,
+} as const
+
+export interface MockLiveTournamentState {
+  hasActiveTournament: boolean
+  tournament: null | {
+    id: string
+    title: string
+    status: 'ACTIVE'
+    roundId: string
+    roundNumber: number
+    phase: string
+  }
+}
+
 export interface MockTournamentState {
   id: string
   title: string
@@ -81,6 +98,10 @@ let mockTournamentState: MockTournamentState = {
   currentRound: DEFAULT_TOURNAMENT_STATE.currentRound,
 }
 
+let mockLiveTournamentState: MockLiveTournamentState = {
+  ...DEFAULT_LIVE_TOURNAMENT_STATE,
+}
+
 let fullTournamentRequestCount = 0
 
 function successResponse<T>(data: T, status = 200) {
@@ -117,6 +138,9 @@ export function resetMockAuthState() {
     participants: [...DEFAULT_TOURNAMENT_STATE.participants],
     currentRound: DEFAULT_TOURNAMENT_STATE.currentRound,
   }
+  mockLiveTournamentState = {
+    ...DEFAULT_LIVE_TOURNAMENT_STATE,
+  }
   fullTournamentRequestCount = 0
 }
 
@@ -130,6 +154,10 @@ export function getFullTournamentRequestCount() {
 
 export function setMockTournamentState(tournament: MockTournamentState) {
   mockTournamentState = tournament
+}
+
+export function setMockLiveTournamentState(liveTournament: MockLiveTournamentState) {
+  mockLiveTournamentState = liveTournament
 }
 
 export const handlers = [
@@ -159,6 +187,15 @@ export const handlers = [
     }
 
     return successResponse(mockAuthState.user)
+  }),
+  http.get(`${API_BASE_URL}/users/me/live-tournament`, ({ request }) => {
+    const authorization = request.headers.get('authorization')
+
+    if (authorization !== `Bearer ${mockAuthState.accessToken}`) {
+      return errorResponse(['Unauthorized'], 401, 'Unauthorized')
+    }
+
+    return successResponse(mockLiveTournamentState)
   }),
   http.post(`${API_BASE_URL}/auth/refresh`, async ({ request }) => {
     const authorization = request.headers.get('authorization')

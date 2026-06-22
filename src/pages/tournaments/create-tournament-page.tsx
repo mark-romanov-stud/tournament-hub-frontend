@@ -8,6 +8,7 @@ import {
   type TournamentVisibility,
   useCreateTournamentMutation,
 } from '@/features/auth/api/tournaments-api'
+import { useLiveTournamentRecovery } from '@/features/tournaments/live/live-tournament-recovery-context'
 
 interface FormErrors {
   title?: string
@@ -45,6 +46,7 @@ export function CreateTournamentPage() {
   const [errors, setErrors] = useState<FormErrors>({})
 
   const navigate = useNavigate()
+  const { activeTournament } = useLiveTournamentRecovery()
   const [createTournament, { isLoading }] = useCreateTournamentMutation()
 
   const clearFieldError = (fieldName: keyof FormErrors) => {
@@ -80,6 +82,10 @@ export function CreateTournamentPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (activeTournament) {
+      return
+    }
 
     if (!validateForm()) {
       return
@@ -136,6 +142,16 @@ export function CreateTournamentPage() {
             void handleSubmit(event)
           }}
         >
+          {activeTournament ? (
+            <div className="live-tournament-conflict" role="alert">
+              <strong>Finish your active tournament before creating another.</strong>
+              <span>
+                {activeTournament.title} is currently in round{' '}
+                {activeTournament.roundNumber}.
+              </span>
+            </div>
+          ) : null}
+
           {errors.api ? <p className="form-error">{errors.api}</p> : null}
 
           <label className="field">
@@ -252,7 +268,11 @@ export function CreateTournamentPage() {
             </div>
           </fieldset>
 
-          <button className="create-button" type="submit" disabled={isLoading}>
+          <button
+            className="create-button"
+            type="submit"
+            disabled={isLoading || Boolean(activeTournament)}
+          >
             {isLoading ? 'Creating...' : '⊕ Create Tournament'}
           </button>
 

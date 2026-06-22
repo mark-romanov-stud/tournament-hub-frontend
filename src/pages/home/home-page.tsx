@@ -5,12 +5,14 @@ import { useLogoutMutation } from '@/features/auth/api/auth-api'
 import { useGetTournamentsQuery } from '@/features/auth/api/tournaments-api'
 import { authActions } from '@/features/auth/model/auth-slice'
 import { clearStoredSession } from '@/features/auth/model/token-storage'
+import { useLiveTournamentRecovery } from '@/features/tournaments/live/live-tournament-recovery-context'
 
 export function HomePage() {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const [logout, { isLoading }] = useLogoutMutation()
   const user = useAppSelector((state) => state.auth.user)
+  const { activeTournament } = useLiveTournamentRecovery()
 
   const {
     data: tournaments = [],
@@ -64,18 +66,28 @@ export function HomePage() {
             flexWrap: 'wrap',
           }}
         >
-          <Link
-            to="/tournaments/create"
-            className="auth-button auth-button--primary dashboard-card__action"
-            style={{
-              textDecoration: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            Create Tournament
-          </Link>
+          {activeTournament ? (
+            <button
+              className="auth-button auth-button--secondary dashboard-card__action"
+              disabled
+              type="button"
+            >
+              Finish Live Match First
+            </button>
+          ) : (
+            <Link
+              to="/tournaments/create"
+              className="auth-button auth-button--primary dashboard-card__action"
+              style={{
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              Create Tournament
+            </Link>
+          )}
 
           <button
             className="auth-button auth-button--primary dashboard-card__action"

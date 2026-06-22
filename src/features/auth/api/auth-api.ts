@@ -20,6 +20,20 @@ import type {
   RegisterInput,
 } from '@/features/auth/model/types'
 
+export interface LiveTournamentSummary {
+  id: string
+  title: string
+  status: 'ACTIVE'
+  roundId: string
+  roundNumber: number
+  phase: string
+}
+
+export interface LiveTournamentResponse {
+  hasActiveTournament: boolean
+  tournament: LiveTournamentSummary | null
+}
+
 function resolveApiBaseUrl() {
   const configuredApiUrl = import.meta.env.VITE_API_URL
 
@@ -179,6 +193,14 @@ export const authApi = createApi({
       transformResponse: unwrapResponseData,
     }),
 
+    getLiveTournament: builder.query<LiveTournamentResponse, string>({
+      query: () => ({
+        url: '/users/me/live-tournament',
+        method: 'GET',
+      }),
+      transformResponse: unwrapResponseData,
+    }),
+
     logout: builder.mutation<boolean, void>({
       query: () => ({
         url: '/auth/logout',
@@ -190,6 +212,7 @@ export const authApi = createApi({
 })
 
 export const {
+  useGetLiveTournamentQuery,
   useGetProfileQuery,
   useLazyGetProfileQuery,
   useLoginMutation,

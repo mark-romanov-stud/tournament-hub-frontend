@@ -9,6 +9,7 @@ import {
   DEFAULT_TOURNAMENT_STATE,
   getFullTournamentRequestCount,
   resetMockAuthState,
+  setMockLiveTournamentState,
   setMockTournamentState,
 } from '@/test/handlers'
 
@@ -582,5 +583,36 @@ describe('TournamentPage realtime flow', () => {
         return element?.textContent === 'Status: COMPLETED'
       }),
     ).toBeVisible()
+  })
+
+  it('blocks joining another tournament while an active live match exists', async () => {
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      ownerId: 'another-owner',
+      participants: [{ userId: 'another-owner', cumulativeScore: 0 }],
+    })
+    setMockLiveTournamentState({
+      hasActiveTournament: true,
+      tournament: {
+        id: 'active-tournament-id',
+        title: 'Already Active Match',
+        status: 'ACTIVE',
+        roundId: 'active-round-id',
+        roundNumber: 1,
+        phase: 'SUBMISSION',
+      },
+    })
+
+    renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+
+    expect(
+      await screen.findByRole('heading', { name: DEFAULT_TOURNAMENT_STATE.title }),
+    ).toBeVisible()
+    expect(screen.getByText(/already active in another tournament/i)).toBeVisible()
+    expect(screen.getByRole('button', { name: /join tournament/i })).toBeDisabled()
+    expect(screen.getByRole('link', { name: /return to live match/i })).toHaveAttribute(
+      'href',
+      '/tournaments/active-tournament-id',
+    )
   })
 })
