@@ -271,6 +271,33 @@ export const handlers = [
       participantCount: mockTournamentState.participants.length,
     })
   }),
+  http.post(`${API_BASE_URL}/tournaments/:tournamentId/start`, ({ request, params }) => {
+    const authorization = request.headers.get('authorization')
+
+    if (authorization !== `Bearer ${mockAuthState.accessToken}`) {
+      return errorResponse(['Unauthorized'], 401, 'Unauthorized')
+    }
+
+    mockTournamentState = {
+      ...mockTournamentState,
+      status: 'ACTIVE',
+      currentRound: {
+        id: `round-${String(params.tournamentId)}`,
+        number: 1,
+        phase: 'SUBMISSION',
+        prompt: {
+          key: 'mock_start_prompt',
+          type: 'TEXT',
+          content: 'A tournament begins when',
+        },
+        submissionDeadline: new Date(Date.now() + 30_000).toISOString(),
+        submissionClosedAt: null,
+        votingDeadline: null,
+      },
+    }
+
+    return successResponse(true)
+  }),
   http.post(`${API_BASE_URL}/rounds/:roundId/submissions`, async ({ request }) => {
     const authorization = request.headers.get('authorization')
 

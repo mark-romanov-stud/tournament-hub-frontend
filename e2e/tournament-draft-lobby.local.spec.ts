@@ -234,6 +234,10 @@ test.describe('local backend draft lobby join flow', () => {
       0,
     )
     await expect(ownerPage.getByText('Participant count: 1')).toBeVisible()
+    await expect(
+      ownerPage.getByRole('button', { name: /start tournament/i }),
+    ).toBeDisabled()
+    await expect(ownerPage.getByText(/1 of 4 participants joined/i)).toBeVisible()
     await expect(ownerPage.getByTestId('tournament-realtime-status')).toContainText(
       'Connected',
     )
@@ -337,11 +341,24 @@ test.describe('local backend draft lobby join flow', () => {
         {},
       ),
     ])
-    await authorizedPost<boolean>(
-      `/tournaments/${tournament.id}/start`,
-      owner.accessToken,
-      {},
-    )
+    await expect(ownerPage.getByText('Participant count: 4')).toBeVisible()
+    await expect(ownerPage.getByText(/all required players are here/i)).toBeVisible()
+    await expect(
+      ownerPage.getByRole('button', { name: /start tournament/i }),
+    ).toBeEnabled()
+    await attachScreenshot(ownerPage, testInfo, '07-owner-ready-to-start')
+    await expectTournamentCardSnapshot(ownerPage, '07-owner-ready-to-start')
+
+    await ownerPage.getByRole('button', { name: /start tournament/i }).click()
+
+    await expect(
+      ownerPage.getByRole('heading', { name: /round 1 submission/i }),
+    ).toBeVisible()
+    await expect(ownerPage.getByTestId('active-round-prompt')).toBeVisible()
+    await expect(
+      ownerPage.getByRole('button', { name: /start tournament/i }),
+    ).toHaveCount(0)
+    await attachScreenshot(ownerPage, testInfo, '08-owner-started-round-one-submission')
 
     const spectatorSession = await createAuthenticatedPage(
       browser,

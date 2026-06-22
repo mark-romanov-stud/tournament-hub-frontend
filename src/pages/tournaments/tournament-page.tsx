@@ -12,6 +12,7 @@ import {
   useGetTournamentQuery,
   useJoinTournamentMutation,
   useLeaveTournamentMutation,
+  useStartTournamentMutation,
   useUpsertRoundSubmissionMutation,
   useUpsertRoundVoteMutation,
 } from '@/features/auth/api/tournaments-api'
@@ -1286,6 +1287,7 @@ export function TournamentPage() {
     data: fullTournament,
     isLoading: isFullLoading,
     isError: isFullError,
+    refetch: refetchFullTournament,
   } = useGetFullTournamentQuery(tournamentId ?? '', {
     skip: !tournamentId || (!canViewFullTournament && !isDraftError),
   })
@@ -1389,6 +1391,9 @@ export function TournamentPage() {
   const [leaveTournament, { isLoading: isLeaving, error: leaveError }] =
     useLeaveTournamentMutation()
 
+  const [startTournament, { isLoading: isStarting, error: startError }] =
+    useStartTournamentMutation()
+
   useEffect(() => {
     if (!lastEvent || !tournamentId) {
       return
@@ -1443,6 +1448,10 @@ export function TournamentPage() {
   const displayedStatus = tournamentFinished?.status ?? tournament.status
   const canJoin = displayedStatus === 'DRAFT' && !isOwner && !isParticipant
   const canLeave = displayedStatus === 'DRAFT' && !isOwner && isParticipant
+  const canStart = displayedStatus === 'DRAFT' && isOwner
+  const minimumParticipantsToStart = 4
+  const hasEnoughParticipantsToStart =
+    displayedParticipants.length >= minimumParticipantsToStart
   const hasLiveTournamentConflict = Boolean(
     recoveredTournament && recoveredTournament.id !== tournamentId,
   )
@@ -1475,6 +1484,15 @@ export function TournamentPage() {
       })
     }
     await refetchDraftTournament()
+  }
+
+  const handleStart = async () => {
+    try {
+      await startTournament(tournamentId).unwrap()
+      await Promise.all([refetchDraftTournament(), refetchFullTournament()])
+    } catch {
+      // RTK Query exposes the error state rendered below.
+    }
   }
 
   return (
@@ -1529,6 +1547,10 @@ export function TournamentPage() {
 
           {leaveError ? (
             <p className="form-error">{getApiErrorMessage(leaveError)}</p>
+          ) : null}
+
+          {startError ? (
+            <p className="form-error">{getApiErrorMessage(startError)}</p>
           ) : null}
 
           <p style={{ marginBottom: '16px' }}>
@@ -1621,6 +1643,29 @@ export function TournamentPage() {
               </div>
             ))}
           </div>
+
+          {canStart ? (
+            <section className="tournament-start-panel">
+              <div>
+                <h3 className="tournament-start-title">Ready to start?</h3>
+                <p className="tournament-start-copy">
+                  {hasEnoughParticipantsToStart
+                    ? 'All required players are here. Start Round 1 when you are ready.'
+                    : `${displayedParticipants.length} of ${minimumParticipantsToStart} participants joined. The tournament needs at least ${minimumParticipantsToStart} players.`}
+                </p>
+              </div>
+              <button
+                className="create-button tournament-start-button"
+                data-testid="start-tournament-button"
+                disabled={isStarting || !hasEnoughParticipantsToStart}
+                onClick={() => {
+                  void handleStart()
+                }}
+              >
+                {isStarting ? 'Starting...' : 'Start Tournament'}
+              </button>
+            </section>
+          ) : null}
 
           {canJoin ? (
             <>

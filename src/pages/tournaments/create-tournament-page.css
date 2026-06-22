@@ -557,6 +557,41 @@
   color: #0f7b5b;
 }
 
+.tournament-start-panel {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px;
+  margin-bottom: 20px;
+  border: 1px solid rgb(31 87 214 / 20%);
+  border-radius: 8px;
+  background: #f4f7ff;
+}
+
+.tournament-start-title,
+.tournament-start-copy {
+  margin: 0;
+}
+
+.tournament-start-copy {
+  margin-top: 6px;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tournament-start-button {
+  flex-shrink: 0;
+  width: auto;
+  margin: 0;
+}
+
+.tournament-start-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .voting-panel {
   gap: 16px;
 }
@@ -822,7 +857,8 @@
 
   .tournament-phase-header,
   .submission-progress-copy,
-  .voting-step-progress {
+  .voting-step-progress,
+  .tournament-start-panel {
     display: grid;
   }
 

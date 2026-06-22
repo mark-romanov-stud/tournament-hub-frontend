@@ -190,6 +190,15 @@ export const tournamentsApi = authApi.injectEndpoints({
       transformResponse: (response: { data: boolean }) => response.data,
     }),
 
+    startTournament: builder.mutation<boolean, string>({
+      query: (tournamentId) => ({
+        url: `/tournaments/${tournamentId}/start`,
+        method: 'POST',
+        body: {},
+      }),
+      transformResponse: (response: { data: boolean }) => response.data,
+    }),
+
     leaveTournament: builder.mutation<boolean, string>({
       query: (tournamentId) => ({
         url: `/tournaments/${tournamentId}/leave`,
@@ -208,6 +217,7 @@ export const {
   useJoinTournamentMutation,
   useLeaveTournamentMutation,
   useLazyGetFullTournamentQuery,
+  useStartTournamentMutation,
   useUpsertRoundVoteMutation,
   useUpsertRoundSubmissionMutation,
 } = tournamentsApi

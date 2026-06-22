@@ -254,6 +254,39 @@ describe('TournamentPage realtime flow', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('enables the owner start action at four participants and opens round one', async () => {
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      participants: [
+        ...DEFAULT_TOURNAMENT_STATE.participants,
+        { userId: 'participant-2', cumulativeScore: 0 },
+        { userId: 'participant-3', cumulativeScore: 0 },
+        { userId: 'participant-4', cumulativeScore: 0 },
+      ],
+      currentRound: null,
+    })
+
+    const { user } = renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+    const startButton = await screen.findByRole('button', {
+      name: /start tournament/i,
+    })
+
+    expect(screen.getByText(/all required players are here/i)).toBeVisible()
+    expect(startButton).toBeEnabled()
+
+    await user.click(startButton)
+
+    expect(
+      await screen.findByRole('heading', { name: /round 1 submission/i }),
+    ).toBeVisible()
+    expect(screen.getByTestId('active-round-prompt')).toHaveTextContent(
+      'A tournament begins when',
+    )
+    expect(
+      screen.queryByRole('button', { name: /start tournament/i }),
+    ).not.toBeInTheDocument()
+  })
+
   it('replaces the prompt and clears the submission form when the active round changes', async () => {
     const firstRoundId = '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5'
     const secondRoundId = '3f8c87b0-28a4-4e83-bc57-1b22e17f5d2a'
