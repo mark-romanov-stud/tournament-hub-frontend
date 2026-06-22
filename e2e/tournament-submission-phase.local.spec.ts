@@ -271,7 +271,7 @@ test.describe('local backend submission phase UI', () => {
     await expect(
       participantPage.getByRole('heading', { name: /round 1 submission/i }),
     ).toBeVisible()
-    await participantPage.getByLabel(/your submission/i).fill(participantSubmission)
+    await participantPage.getByLabel(/continue the phrase/i).fill(participantSubmission)
     await attachScreenshot(participantPage, testInfo, '02-participant-ready-to-submit')
     await expectPhasePanelSnapshot(
       participantPage,
@@ -279,7 +279,7 @@ test.describe('local backend submission phase UI', () => {
       [
         participantPage.getByTestId('submission-countdown'),
         participantPage.locator('.tournament-prompt'),
-        participantPage.getByLabel(/your submission/i),
+        participantPage.getByLabel(/continue the phrase/i),
       ],
     )
     await participantPage.getByRole('button', { name: /submit response/i }).click()
@@ -299,13 +299,13 @@ test.describe('local backend submission phase UI', () => {
     ])
 
     await ownerPage
-      .getByLabel(/your submission/i)
+      .getByLabel(/continue the phrase/i)
       .fill('Owner answer that completes the active submission set.')
     await attachScreenshot(ownerPage, testInfo, '04-owner-ready-to-submit')
     await expectPhasePanelSnapshot(ownerPage, '04-owner-ready-to-submit-panel', [
       ownerPage.getByTestId('submission-countdown'),
       ownerPage.locator('.tournament-prompt'),
-      ownerPage.getByLabel(/your submission/i),
+      ownerPage.getByLabel(/continue the phrase/i),
     ])
     await ownerPage.getByRole('button', { name: /submit response/i }).click()
 
@@ -374,6 +374,15 @@ test.describe('local backend submission phase UI', () => {
     await expect(
       participantPage.getByRole('heading', { name: /round 2 submission/i }),
     ).toBeVisible()
+    const nextRoundPrompt = participantPage.getByTestId('active-round-prompt')
+
+    await expect(nextRoundPrompt).not.toContainText(prompt)
+    await expect(nextRoundPrompt).toContainText(/phrase to continue/i)
+    await expect(participantPage.getByTestId('round-submission-form')).toHaveAttribute(
+      'data-round-id',
+      /.+/,
+    )
+    await expect(participantPage.getByLabel(/continue the phrase/i)).toHaveValue('')
     await attachScreenshot(
       participantPage,
       testInfo,
@@ -393,6 +402,7 @@ test.describe('local backend submission phase UI', () => {
         {
           animations: 'disabled',
           mask: [
+            participantPage.locator('.live-results-panel').getByText(/round 2 next/i),
             participantPage.locator('.result-identity'),
             participantPage.locator('.leaderboard-row strong'),
           ],
@@ -403,6 +413,24 @@ test.describe('local backend submission phase UI', () => {
         element.remove()
       })
     }
+
+    await participantPage
+      .getByLabel(/continue the phrase/i)
+      .fill('A fresh continuation for the new active prompt.')
+    await attachScreenshot(
+      participantPage,
+      testInfo,
+      '10-next-round-prompt-and-fresh-submission',
+    )
+    await expectPhasePanelSnapshot(
+      participantPage,
+      '10-next-round-prompt-and-fresh-submission-panel',
+      [
+        participantPage.getByTestId('submission-countdown'),
+        nextRoundPrompt,
+        participantPage.getByLabel(/continue the phrase/i),
+      ],
+    )
 
     await participantSession.context.close()
     await ownerSession.context.close()

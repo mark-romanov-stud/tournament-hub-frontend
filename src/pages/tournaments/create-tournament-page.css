@@ -454,9 +454,10 @@
   display: grid;
   gap: 8px;
   padding: 16px;
-  border: 1px solid #dbe4f0;
+  border: 1px solid rgb(31 87 214 / 24%);
+  border-left: 4px solid var(--brand);
   border-radius: 8px;
-  background: #f8fbff;
+  background: linear-gradient(135deg, #f8fbff, #f3f7ff);
 }
 
 .tournament-prompt p:not(.tournament-prompt-label) {
@@ -467,11 +468,17 @@
 }
 
 .tournament-prompt-deadline,
+.tournament-prompt-instruction,
 .submission-progress-note,
 .submission-saved {
   color: var(--text-soft);
   font-size: 13px;
   font-weight: 700;
+}
+
+.tournament-prompt-instruction {
+  padding-top: 8px;
+  border-top: 1px solid rgb(31 87 214 / 10%);
 }
 
 .submission-progress {
@@ -508,6 +515,10 @@
 .submission-form {
   display: grid;
   gap: 12px;
+  padding: 16px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #fff;
 }
 
 .submission-form label {
