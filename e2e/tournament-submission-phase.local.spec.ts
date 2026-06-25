@@ -1,7 +1,6 @@
 import {
   expect,
   type Browser,
-  type Locator,
   type Page,
   request,
   type TestInfo,
@@ -64,7 +63,7 @@ async function attachScreenshot(page: Page, testInfo: TestInfo, name: string) {
   })
 }
 
-async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[] = []) {
+async function expectPhasePanelSnapshot(page: Page, name: string) {
   await page.locator('[data-e2e-stage-marker]').evaluateAll((elements) => {
     for (const element of elements) {
       element.remove()
@@ -74,7 +73,7 @@ async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[
   const snapshotStyle = await page.addStyleTag({
     content: `
       .live-tournament-recovery { display: none; }
-      .tournament-prompt { height: 132px; overflow: hidden; }
+      .tournament-prompt { min-height: 96px; }
     `,
   })
 
@@ -83,7 +82,6 @@ async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[
       `${name}.png`,
       {
         animations: 'disabled',
-        mask,
         maxDiffPixelRatio: 0.02,
       },
     )
@@ -96,7 +94,7 @@ async function expectPhasePanelSnapshot(page: Page, name: string, mask: Locator[
 
 async function registerUser(runId: string, index: number): Promise<TestUser> {
   const api = await request.newContext()
-  const email = `submission-${runId}-${index}@pulse.test`
+  const email = `submission-${runId}-${index}@tournamenthub.test`
   const username = `s${runId}${index}`.slice(0, 14)
   const response = await api.post(`${apiBaseUrl}/auth/register`, {
     data: { email, password, username },
@@ -265,7 +263,6 @@ test.describe('local backend submission phase UI', () => {
     await attachScreenshot(ownerPage, testInfo, '01-owner-submission-phase')
     await expectPhasePanelSnapshot(ownerPage, '01-owner-submission-phase-panel', [
       ownerPage.getByTestId('submission-countdown'),
-      ownerPage.locator('.tournament-prompt'),
     ])
 
     await expect(
@@ -278,7 +275,6 @@ test.describe('local backend submission phase UI', () => {
       '02-participant-ready-to-submit-panel',
       [
         participantPage.getByTestId('submission-countdown'),
-        participantPage.locator('.tournament-prompt'),
         participantPage.getByLabel(/continue the phrase/i),
       ],
     )
@@ -295,7 +291,6 @@ test.describe('local backend submission phase UI', () => {
     await attachScreenshot(ownerPage, testInfo, '03-owner-progress-hidden-content')
     await expectPhasePanelSnapshot(ownerPage, '03-owner-progress-hidden-content-panel', [
       ownerPage.getByTestId('submission-countdown'),
-      ownerPage.locator('.tournament-prompt'),
     ])
 
     await ownerPage
@@ -304,7 +299,6 @@ test.describe('local backend submission phase UI', () => {
     await attachScreenshot(ownerPage, testInfo, '04-owner-ready-to-submit')
     await expectPhasePanelSnapshot(ownerPage, '04-owner-ready-to-submit-panel', [
       ownerPage.getByTestId('submission-countdown'),
-      ownerPage.locator('.tournament-prompt'),
       ownerPage.getByLabel(/continue the phrase/i),
     ])
     await ownerPage.getByRole('button', { name: /submit response/i }).click()
@@ -401,11 +395,6 @@ test.describe('local backend submission phase UI', () => {
         '09-round-results-and-leaderboard-panel.png',
         {
           animations: 'disabled',
-          mask: [
-            participantPage.locator('.live-results-panel').getByText(/round 2 next/i),
-            participantPage.locator('.result-identity'),
-            participantPage.locator('.leaderboard-row strong'),
-          ],
         },
       )
     } finally {
@@ -427,7 +416,6 @@ test.describe('local backend submission phase UI', () => {
       '10-next-round-prompt-and-fresh-submission-panel',
       [
         participantPage.getByTestId('submission-countdown'),
-        nextRoundPrompt,
         participantPage.getByLabel(/continue the phrase/i),
       ],
     )

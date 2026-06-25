@@ -48,7 +48,7 @@ async function registerUser(runId: string, index: number): Promise<TestUser> {
   const api = await request.newContext()
   const response = await api.post(`${apiBaseUrl}/auth/register`, {
     data: {
-      email: `recovery-${runId}-${index}@pulse.test`,
+      email: `recovery-${runId}-${index}@tournamenthub.test`,
       password,
       username: `r${runId}${index}`.slice(0, 14),
     },
@@ -148,7 +148,6 @@ test.describe('active live tournament app recovery', () => {
     await attachScreenshot(page, testInfo, '01-dashboard-live-match-recovery')
     await expect(recoveryBanner).toHaveScreenshot('01-live-match-recovery-banner.png', {
       animations: 'disabled',
-      mask: [recoveryBanner.locator('strong')],
     })
 
     await page.goto('/tournaments/create')

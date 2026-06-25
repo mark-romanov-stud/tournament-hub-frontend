@@ -1,6 +1,7 @@
 import {
   expect,
   type Browser,
+  type Locator,
   type Page,
   request,
   test,
@@ -21,6 +22,7 @@ interface TestUser {
 
 interface CreatedTournament {
   id: string
+  inviteToken?: string
 }
 
 async function attachScreenshot(page: Page, testInfo: TestInfo, name: string) {
@@ -61,18 +63,21 @@ async function attachScreenshot(page: Page, testInfo: TestInfo, name: string) {
   })
 }
 
-async function expectTournamentCardSnapshot(page: Page, name: string) {
-  const card = page.locator('.create-tournament-card')
-  const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu
+async function expectTournamentCardSnapshot(
+  page: Page,
+  name: string,
+  mask: Locator[] = [],
+) {
+  const card = page.locator('.tournament-main-card')
 
   await expect(card).toHaveScreenshot(`${name}.png`, {
     animations: 'disabled',
     mask: [
-      card.locator('h2'),
-      card.locator('p').filter({ hasText: uuidPattern }),
-      card.getByText(/^Active users:/u),
-      card.getByTestId('tournament-latest-event'),
+      card.locator('.tournament-id-block p'),
+      card.locator('.participant-row strong'),
+      ...mask,
     ],
+    maskColor: '#fde68a',
   })
 }
 
@@ -109,10 +114,13 @@ async function authorizedPost<T>(
 
 async function registerUser(runId: string, label: string): Promise<TestUser> {
   const api = await request.newContext()
-  const email = `draft-${runId}-${label}@pulse.test`
-  const username = `d${label}${runId}${Math.random().toString(36).slice(2, 4)}`
+  const uniqueSuffix = `${Date.now().toString(36).slice(-5)}${Math.random()
+    .toString(36)
+    .slice(2, 6)}`
+  const email = `draft-${runId}-${label}-${uniqueSuffix}@tournamenthub.test`
+  const username = `d${label.slice(0, 3)}${uniqueSuffix}`
     .replace(/[^a-z0-9]/giu, '')
-    .slice(0, 14)
+    .slice(0, 15)
   const response = await api.post(`${apiBaseUrl}/auth/register`, {
     data: { email, password, username },
   })
@@ -140,13 +148,14 @@ async function registerUser(runId: string, label: string): Promise<TestUser> {
 async function createDraftTournament(
   owner: TestUser,
   runId: string,
+  visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC',
 ): Promise<CreatedTournament> {
   return authorizedPost<CreatedTournament>('/tournaments', owner.accessToken, {
     description: 'Playwright draft lobby join and realtime flow.',
     roundsCount: 3,
     submissionDurationSeconds: 45,
     title: `Draft Lobby ${runId}`,
-    visibility: 'PUBLIC',
+    visibility,
     voteDurationSeconds: 30,
   })
 }
@@ -293,12 +302,12 @@ test.describe('local backend draft lobby join flow', () => {
     await expect(
       participantPage.getByRole('button', { name: /join tournament/i }),
     ).toHaveCount(0)
-    await expect(participantPage.getByText(participant.id)).toBeVisible()
+    await expect(participantPage.getByText(participant.username)).toBeVisible()
     await expect(participantPage.getByText('Participant count: 2')).toBeVisible()
     await attachScreenshot(participantPage, testInfo, '04-participant-after-join')
     await expectTournamentCardSnapshot(participantPage, '04-participant-after-join')
 
-    await expect(ownerPage.getByText(participant.id)).toBeVisible()
+    await expect(ownerPage.getByText(participant.username)).toBeVisible()
     await expect(ownerPage.getByText('Participant count: 2')).toBeVisible()
     await attachScreenshot(ownerPage, testInfo, '05-owner-realtime-after-join')
     await expectTournamentCardSnapshot(ownerPage, '05-owner-realtime-after-join')
@@ -311,7 +320,7 @@ test.describe('local backend draft lobby join flow', () => {
 
     await participantPage.getByRole('button', { name: /leave tournament/i }).click()
 
-    await expect(ownerPage.getByText(participant.id)).toHaveCount(0)
+    await expect(ownerPage.getByText(participant.username)).toHaveCount(0)
     await expect(ownerPage.getByText('Participant count: 1')).toBeVisible()
     await attachScreenshot(ownerPage, testInfo, '06-owner-realtime-after-leave')
     await expectTournamentCardSnapshot(ownerPage, '06-owner-realtime-after-leave')
@@ -380,12 +389,75 @@ test.describe('local backend draft lobby join flow', () => {
       {
         animations: 'disabled',
         fullPage: true,
+        mask: [spectatorSession.page.locator('.tournament-id-block p')],
+        maskColor: '#fde68a',
       },
     )
 
     await spectatorSession.context.close()
     await participantSession.context.close()
     await ownerSession.context.close()
+  })
+
+  test('joins a private draft tournament from the dashboard join code modal', async ({
+    browser,
+  }) => {
+    const runId = Math.random().toString(36).slice(2, 10)
+    const [owner, participant] = await Promise.all([
+      registerUser(runId, 'privateowner'),
+      registerUser(runId, 'privatejoiner'),
+    ])
+    const tournament = await createDraftTournament(owner, `Private ${runId}`, 'PRIVATE')
+
+    expect(
+      tournament.inviteToken,
+      'private tournaments should return inviteToken',
+    ).toBeTruthy()
+
+    const context = await browser.newContext()
+
+    await context.addInitScript(
+      ({ accessToken, refreshToken }) => {
+        window.sessionStorage.setItem('tournament-hub.auth.access-token', accessToken)
+        window.sessionStorage.setItem('tournament-hub.auth.refresh-token', refreshToken)
+      },
+      {
+        accessToken: participant.accessToken,
+        refreshToken: participant.refreshToken,
+      },
+    )
+
+    const page = await context.newPage()
+
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: /curator dashboard/i })).toBeVisible()
+    await page.getByRole('button', { name: /join by code/i }).click()
+    await expect(page.getByRole('dialog', { name: /join by code/i })).toBeVisible()
+
+    const inviteLink = `${new URL('/', page.url()).origin}/tournaments/${tournament.id}?inviteToken=${tournament.inviteToken}`
+
+    await page.getByLabel(/room code or invite link/i).fill(inviteLink)
+    await page.getByRole('button', { name: /^join$/i }).click()
+
+    await expect(
+      page.getByRole('heading', { name: `Draft Lobby Private ${runId}` }),
+    ).toBeVisible()
+    await expect(page).toHaveURL(
+      new RegExp(`/tournaments/${tournament.id}\\?inviteToken=${tournament.inviteToken}`),
+    )
+
+    const joinResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/v1/tournaments/${tournament.id}/join`) &&
+        response.request().method() === 'POST',
+    )
+
+    await page.getByRole('button', { name: /join tournament/i }).click()
+    await expect((await joinResponse).ok()).toBe(true)
+    await expect(page.getByText(participant.username)).toBeVisible()
+    await expect(page.getByText('Participant count: 2')).toBeVisible()
+
+    await context.close()
   })
 
   test('displays join API errors to the user', async ({ browser }, testInfo) => {
