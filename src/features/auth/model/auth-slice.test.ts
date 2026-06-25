@@ -27,7 +27,7 @@ describe('authSlice', () => {
       withTokens,
       authActions.userReceived({
         id: 'user-1',
-        email: 'curator@pulse.com',
+        email: 'curator@tournamenthub.test',
         username: 'curator',
       }),
     )
@@ -38,7 +38,7 @@ describe('authSlice', () => {
     })
     expect(withUser.user).toEqual({
       id: 'user-1',
-      email: 'curator@pulse.com',
+      email: 'curator@tournamenthub.test',
       username: 'curator',
     })
   })
@@ -52,7 +52,7 @@ describe('authSlice', () => {
       },
       user: {
         id: 'user-1',
-        email: 'curator@pulse.com',
+        email: 'curator@tournamenthub.test',
         username: 'curator',
       },
     }

@@ -7,7 +7,7 @@ import { LiveTournamentRecoveryProvider } from '@/features/tournaments/live/live
 function SessionGate() {
   return (
     <main className="session-gate">
-      <div className="session-gate__pulse" />
+      <div className="session-gate__signal" />
       <p className="session-gate__copy">Restoring your session...</p>
     </main>
   )

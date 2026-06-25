@@ -31,7 +31,7 @@ export function LiveTournamentRecoveryProvider({ children }: { children: ReactNo
           data-testid="live-tournament-recovery"
           aria-live="polite"
         >
-          <div className="live-tournament-recovery__pulse" aria-hidden="true" />
+          <div className="live-tournament-recovery__signal" aria-hidden="true" />
           <div className="live-tournament-recovery__copy">
             <span>Active live tournament</span>
             <strong>{activeTournament.title}</strong>

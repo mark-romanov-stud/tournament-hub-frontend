@@ -148,7 +148,7 @@ export function LoginPage() {
 
         <div className="login-stage__tiles">
           <StatTile description="Tournament prestige" title="Curated" />
-          <StatTile description="Judging pulse" title="Live" tone="mint" />
+          <StatTile description="Live judging" title="Live" tone="mint" />
         </div>
       </div>
     </AuthShell>

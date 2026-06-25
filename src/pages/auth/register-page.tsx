@@ -11,7 +11,6 @@ import {
   MailIcon,
   PasswordField,
   PrimaryButton,
-  QuotePanel,
   StatTile,
   SurfaceCard,
   TextField,
@@ -134,7 +133,7 @@ export function RegisterPage() {
             icon={<MailIcon />}
             label="Email Address"
             name="email"
-            placeholder="name@pulse.com"
+            placeholder="name@tournamenthub.test"
             value={formState.email}
             onChange={(event) => updateField('email', event.target.value)}
           />
@@ -170,12 +169,10 @@ export function RegisterPage() {
         <div className="auth-card__footer">
           <span className="auth-card__divider">Already have an account?</span>
           <AuthLinkAction className="auth-button auth-button--secondary" to="/login">
-            Login to Pulse
+            Login to Tournament Hub
           </AuthLinkAction>
         </div>
       </SurfaceCard>
-
-      <QuotePanel />
     </AuthShell>
   )
 }

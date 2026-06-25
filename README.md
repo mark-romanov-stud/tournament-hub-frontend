@@ -1,6 +1,6 @@
 # Tournament Hub Frontend
 
-React frontend for The Precision Pulse authentication and tournament management flows.
+React frontend for Tournament Hub authentication and tournament management flows.
 
 The project now includes:
 

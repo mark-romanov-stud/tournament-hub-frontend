@@ -45,7 +45,7 @@ export function BrandLogo({ compact = false }: { compact?: boolean }) {
           <rect x="32" y="22" width="8" height="14" rx="2" />
         </svg>
       </IconFrame>
-      <span className="brand-lockup__wordmark">The Precision Pulse</span>
+      <span className="brand-lockup__wordmark">Tournament Hub</span>
     </div>
   )
 }
