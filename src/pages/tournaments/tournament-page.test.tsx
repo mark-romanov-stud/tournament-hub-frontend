@@ -114,7 +114,9 @@ describe('TournamentPage realtime flow', () => {
         'Connected',
       )
     })
-    expect(screen.getByText(DEFAULT_AUTH_STATE.user.id)).toBeVisible()
+    expect(
+      screen.getByTestId(`participant-${DEFAULT_AUTH_STATE.user.id}`),
+    ).toHaveTextContent(`${DEFAULT_AUTH_STATE.user.username} · You`)
     expect(fakeSocket.emitted).toContainEqual({
       eventName: 'tournament:join',
       payload: { tournamentId: DEFAULT_TOURNAMENT_STATE.id },
@@ -135,10 +137,7 @@ describe('TournamentPage realtime flow', () => {
         tournamentId: DEFAULT_TOURNAMENT_STATE.id,
       })
     })
-
-    expect(await screen.findByTestId('tournament-latest-event')).toHaveTextContent(
-      'tournament:started',
-    )
+    expect(screen.queryByTestId('tournament-latest-event')).not.toBeInTheDocument()
 
     act(() => {
       fakeSocket.trigger('disconnect')
@@ -154,9 +153,7 @@ describe('TournamentPage realtime flow', () => {
     await waitFor(() => {
       expect(getFullTournamentRequestCount()).toBe(2)
     })
-    expect(screen.getByTestId('tournament-recovery-note')).toHaveTextContent(
-      /state recovered after reconnect/i,
-    )
+    expect(screen.queryByTestId('tournament-recovery-note')).not.toBeInTheDocument()
 
     unmount()
 
@@ -355,7 +352,9 @@ describe('TournamentPage realtime flow', () => {
   it('updates draft participants and counts from realtime join and leave events', async () => {
     renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
 
-    expect(await screen.findByText(DEFAULT_AUTH_STATE.user.id)).toBeVisible()
+    expect(
+      await screen.findByTestId(`participant-${DEFAULT_AUTH_STATE.user.id}`),
+    ).toHaveTextContent(`${DEFAULT_AUTH_STATE.user.username} · You`)
     expect(
       screen.getByText((_content, element) => {
         return element?.textContent === 'Participant count: 1'
@@ -366,11 +365,12 @@ describe('TournamentPage realtime flow', () => {
       fakeSocket.trigger('tournament:participant_joined', {
         tournamentId: DEFAULT_TOURNAMENT_STATE.id,
         userId: 'participant-2',
+        username: 'participant_two',
         occurredAt: new Date().toISOString(),
       })
     })
 
-    expect(await screen.findByText('participant-2')).toBeVisible()
+    expect(await screen.findByText('participant_two')).toBeVisible()
     expect(
       screen.getByText((_content, element) => {
         return element?.textContent === 'Participant count: 2'
@@ -542,7 +542,7 @@ describe('TournamentPage realtime flow', () => {
       status: 'ACTIVE',
       participants: [
         ...DEFAULT_TOURNAMENT_STATE.participants,
-        { userId: participantId, cumulativeScore: 0 },
+        { userId: participantId, username: 'participant_two', cumulativeScore: 0 },
       ],
       currentRound: {
         id: roundId,
@@ -618,8 +618,14 @@ describe('TournamentPage realtime flow', () => {
     expect(screen.getByTestId('round-result-submission-2')).toHaveTextContent('3 likes')
     expect(screen.getByTestId('round-result-submission-2')).toHaveTextContent('1 dislike')
     expect(screen.getByTestId('round-result-submission-2')).toHaveTextContent('+2 points')
+    expect(screen.getByTestId('round-result-submission-2')).not.toHaveTextContent(
+      'Ranked response',
+    )
+    expect(screen.getByTestId('round-result-submission-2')).not.toHaveTextContent(
+      'submission-2',
+    )
     expect(screen.getByTestId('live-leaderboard')).toHaveTextContent(
-      `1${participantId}2 points`,
+      '1participant_two2 points',
     )
     expect(screen.getByTestId(`participant-${participantId}`)).toHaveTextContent(
       'Score: 2',
@@ -634,7 +640,7 @@ describe('TournamentPage realtime flow', () => {
       status: 'ACTIVE',
       participants: [
         ...DEFAULT_TOURNAMENT_STATE.participants,
-        { userId: participantId, cumulativeScore: 1 },
+        { userId: participantId, username: 'participant_two', cumulativeScore: 1 },
       ],
       currentRound: {
         id: 'final-round',
@@ -671,9 +677,9 @@ describe('TournamentPage realtime flow', () => {
     expect(
       await screen.findByRole('heading', { name: /tournament finished/i }),
     ).toBeVisible()
-    expect(screen.getByTestId('tournament-winner')).toHaveTextContent(participantId)
+    expect(screen.getByTestId('tournament-winner')).toHaveTextContent('participant_two')
     expect(screen.getByTestId('live-leaderboard')).toHaveTextContent(
-      `1${participantId}7 points`,
+      '1participant_two7 points',
     )
     expect(screen.queryByRole('button', { name: /^like$/i })).not.toBeInTheDocument()
     expect(

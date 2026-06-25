@@ -104,8 +104,12 @@ export function CreateTournamentPage() {
       }
 
       const tournament = await createTournament(requestBody).unwrap()
+      const inviteQuery =
+        tournament.visibility === 'PRIVATE' && tournament.inviteToken
+          ? `?inviteToken=${encodeURIComponent(tournament.inviteToken)}`
+          : ''
 
-      void navigate(`/tournaments/${tournament.id}`)
+      void navigate(`/tournaments/${tournament.id}${inviteQuery}`)
     } catch (error) {
       setErrors({
         api: getApiErrorMessage(error),
@@ -118,7 +122,7 @@ export function CreateTournamentPage() {
       <header className="create-tournament-header">
         <div className="brand">
           <span className="brand-icon">▥</span>
-          <span>The Precision Pulse</span>
+          <span>Tournament Hub</span>
         </div>
 
         <div className="avatar" aria-label="User avatar">

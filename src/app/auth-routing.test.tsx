@@ -117,4 +117,82 @@ describe('Authenticated routing', () => {
       expect(screen.queryByTestId('live-tournament-recovery')).not.toBeInTheDocument()
     })
   })
+
+  it('opens a public tournament from the dashboard join code modal', async () => {
+    persistTokens({
+      accessToken: DEFAULT_AUTH_STATE.accessToken,
+      refreshToken: DEFAULT_AUTH_STATE.refreshToken,
+    })
+
+    const { router, user } = renderApp(['/'])
+
+    expect(
+      await screen.findByRole('heading', { name: /curator dashboard/i }),
+    ).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /join by code/i }))
+    expect(screen.getByRole('dialog', { name: /join by code/i })).toBeVisible()
+
+    await user.type(
+      screen.getByLabelText(/room code or invite link/i),
+      DEFAULT_TOURNAMENT_STATE.id,
+    )
+    await user.click(screen.getByRole('button', { name: /^join$/i }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(
+        `/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`,
+      )
+      expect(router.state.location.search).toBe('')
+    })
+  })
+
+  it('preserves private invite tokens from the dashboard join code modal', async () => {
+    const inviteToken = '11111111-2222-4333-8444-555555555555'
+
+    persistTokens({
+      accessToken: DEFAULT_AUTH_STATE.accessToken,
+      refreshToken: DEFAULT_AUTH_STATE.refreshToken,
+    })
+
+    const { router, user } = renderApp(['/'])
+
+    expect(
+      await screen.findByRole('heading', { name: /curator dashboard/i }),
+    ).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /join by code/i }))
+    await user.type(
+      screen.getByLabelText(/room code or invite link/i),
+      `${window.location.origin}/tournaments/${DEFAULT_TOURNAMENT_STATE.id}?inviteToken=${inviteToken}`,
+    )
+    await user.click(screen.getByRole('button', { name: /^join$/i }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(
+        `/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`,
+      )
+      expect(router.state.location.search).toBe(`?inviteToken=${inviteToken}`)
+    })
+  })
+
+  it('shows an inline error for an invalid dashboard room code', async () => {
+    persistTokens({
+      accessToken: DEFAULT_AUTH_STATE.accessToken,
+      refreshToken: DEFAULT_AUTH_STATE.refreshToken,
+    })
+
+    const { router, user } = renderApp(['/'])
+
+    expect(
+      await screen.findByRole('heading', { name: /curator dashboard/i }),
+    ).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /join by code/i }))
+    await user.type(screen.getByLabelText(/room code or invite link/i), 'not-a-room')
+    await user.click(screen.getByRole('button', { name: /^join$/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/enter a tournament link/i)
+    expect(router.state.location.pathname).toBe('/')
+  })
 })

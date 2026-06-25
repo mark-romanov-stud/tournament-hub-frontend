@@ -6,6 +6,7 @@ export type TournamentStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 
 export interface TournamentParticipant {
   userId: string
+  username?: string
   cumulativeScore: number
 }
 

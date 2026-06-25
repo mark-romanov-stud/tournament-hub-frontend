@@ -5,7 +5,7 @@ export const API_BASE_URL = '*/api/v1'
 export const DEFAULT_AUTH_STATE = {
   user: {
     id: '2ed3cf87-3f6f-4f88-8fd3-3f0f410fb410',
-    email: 'curator@pulse.com',
+    email: 'curator@tournamenthub.test',
     username: 'curator_john',
   },
   accessToken: 'access-token-1',
@@ -25,6 +25,7 @@ export const DEFAULT_TOURNAMENT_STATE = {
   participants: [
     {
       userId: DEFAULT_AUTH_STATE.user.id,
+      username: DEFAULT_AUTH_STATE.user.username,
       cumulativeScore: 0,
     },
   ],
@@ -60,6 +61,7 @@ export interface MockTournamentState {
   ownerId: string
   participants: {
     userId: string
+    username?: string
     cumulativeScore: number
   }[]
   currentRound: null | {

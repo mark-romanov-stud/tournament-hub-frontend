@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { useAppDispatch, useAppSelector } from '@/app/providers/store'
 import { authApi } from '@/features/auth/api/auth-api'
@@ -24,6 +24,7 @@ import { useTournamentRealtime } from '@/features/tournaments/realtime/use-tourn
 interface ParticipantEventPayload {
   tournamentId: string
   userId: string
+  username?: string
   occurredAt: string
 }
 
@@ -51,7 +52,7 @@ interface TournamentRoundViewState {
 
 interface TournamentParticipantViewState {
   baseKey: string
-  joinedUserIds: string[]
+  joinedParticipants: TournamentParticipant[]
   leftUserIds: string[]
 }
 
@@ -70,7 +71,11 @@ type TournamentRoundViewAction =
     }
 
 type TournamentParticipantViewAction =
-  | { type: 'participantJoined'; baseKey: string; userId: string }
+  | {
+      type: 'participantJoined'
+      baseKey: string
+      participant: TournamentParticipant
+    }
   | { type: 'participantLeft'; baseKey: string; userId: string }
 
 const initialTournamentRoundViewState: TournamentRoundViewState = {
@@ -81,7 +86,7 @@ const initialTournamentRoundViewState: TournamentRoundViewState = {
 
 const initialTournamentParticipantViewState: TournamentParticipantViewState = {
   baseKey: '',
-  joinedUserIds: [],
+  joinedParticipants: [],
   leftUserIds: [],
 }
 
@@ -202,6 +207,16 @@ const initialSequentialVotingState: SequentialVotingState = {
 
 const emptyParticipants: TournamentParticipant[] = []
 
+function getParticipantDisplayName(participant: TournamentParticipant | undefined) {
+  const username = participant?.username?.trim()
+
+  if (username) {
+    return username
+  }
+
+  return participant?.userId ?? 'Unknown participant'
+}
+
 const realtimeStatusCopy: Record<
   TournamentConnectionStatus,
   { label: string; tone: string; title: string; description: string }
@@ -238,59 +253,27 @@ const realtimeStatusCopy: Record<
   },
 }
 
-function TournamentRealtimePanel({
+function TournamentRealtimeBadge({
   connectionStatus,
-  lastEvent,
-  lastRecoveredAt,
 }: {
   connectionStatus: TournamentConnectionStatus
-  lastEvent: TournamentRealtimeEvent | null
-  lastRecoveredAt: string | null
 }) {
   const status = realtimeStatusCopy[connectionStatus]
 
   return (
-    <section
-      className={`tournament-realtime-panel tournament-realtime-panel-${status.tone}`}
+    <div
+      className={`tournament-realtime-badge tournament-realtime-badge-${status.tone}`}
       aria-live="polite"
     >
-      <div className="tournament-realtime-panel-header">
-        <div>
-          <p className="tournament-realtime-panel-eyebrow">Realtime room</p>
-          <h3>{status.title}</h3>
-        </div>
-
-        <span
-          className="tournament-realtime-panel-badge"
-          data-testid="tournament-realtime-status"
-        >
-          <span className="tournament-realtime-panel-dot" />
-          {status.label}
-        </span>
-      </div>
-
-      <p className="tournament-realtime-panel-copy">{status.description}</p>
-
-      {lastRecoveredAt ? (
-        <p
-          className="tournament-realtime-panel-recovery"
-          data-testid="tournament-recovery-note"
-        >
-          State recovered after reconnect at {lastRecoveredAt}
-        </p>
-      ) : null}
-
-      {lastEvent ? (
-        <p
-          className="tournament-realtime-panel-event"
-          data-testid="tournament-latest-event"
-        >
-          Latest event: <strong>{lastEvent.name}</strong>
-        </p>
-      ) : (
-        <p className="tournament-realtime-panel-event">Waiting for first event…</p>
-      )}
-    </section>
+      <span
+        className="tournament-realtime-panel-badge"
+        data-testid="tournament-realtime-status"
+      >
+        <span className="tournament-realtime-panel-dot" />
+        {status.label}
+      </span>
+      <span className="tournament-realtime-badge-copy">{status.title}</span>
+    </div>
   )
 }
 
@@ -358,25 +341,36 @@ function tournamentParticipantViewReducer(
       ? state
       : {
           baseKey: action.baseKey,
-          joinedUserIds: [],
+          joinedParticipants: [],
           leftUserIds: [],
         }
 
   switch (action.type) {
-    case 'participantJoined':
+    case 'participantJoined': {
+      const joinedParticipants = nextState.joinedParticipants.some(
+        (participant) => participant.userId === action.participant.userId,
+      )
+        ? nextState.joinedParticipants.map((participant) =>
+            participant.userId === action.participant.userId
+              ? { ...participant, ...action.participant }
+              : participant,
+          )
+        : [...nextState.joinedParticipants, action.participant]
+
       return {
         baseKey: action.baseKey,
-        joinedUserIds: nextState.joinedUserIds.includes(action.userId)
-          ? nextState.joinedUserIds
-          : [...nextState.joinedUserIds, action.userId],
-        leftUserIds: nextState.leftUserIds.filter((userId) => userId !== action.userId),
+        joinedParticipants,
+        leftUserIds: nextState.leftUserIds.filter(
+          (userId) => userId !== action.participant.userId,
+        ),
       }
+    }
 
     case 'participantLeft':
       return {
         baseKey: action.baseKey,
-        joinedUserIds: nextState.joinedUserIds.filter(
-          (userId) => userId !== action.userId,
+        joinedParticipants: nextState.joinedParticipants.filter(
+          (participant) => participant.userId !== action.userId,
         ),
         leftUserIds: nextState.leftUserIds.includes(action.userId)
           ? nextState.leftUserIds
@@ -628,6 +622,7 @@ function isParticipantEventPayload(payload: unknown): payload is ParticipantEven
     isRecord(payload) &&
     typeof payload.tournamentId === 'string' &&
     typeof payload.userId === 'string' &&
+    (!('username' in payload) || typeof payload.username === 'string') &&
     typeof payload.occurredAt === 'string'
   )
 }
@@ -1069,9 +1064,6 @@ function SubmissionPhasePanel({
       <div className="tournament-prompt" data-testid="active-round-prompt">
         <p className="tournament-prompt-label">Phrase to continue</p>
         <p id={promptId}>{getPromptText(round.prompt.content)}</p>
-        <span className="tournament-prompt-instruction">
-          Write the next part of this phrase in the form below.
-        </span>
         <span className="tournament-prompt-deadline">
           Deadline: {formatDeadline(round.submissionDeadline)}
         </span>
@@ -1083,7 +1075,8 @@ function SubmissionPhasePanel({
             {submittedCount} of {totalParticipants} submitted
           </strong>
           <span className="submission-progress-note">
-            Submissions are hidden until voting starts.
+            Voting starts after all responses.
+            <span className="sr-only">Submissions are hidden until voting starts.</span>
           </span>
         </div>
         <div
@@ -1139,13 +1132,23 @@ function SubmissionPhasePanel({
 function LiveTournamentResults({
   currentUserId,
   finished,
+  participants,
   roundCompleted,
 }: {
   currentUserId: string | undefined
   finished: TournamentFinishedPayload | null
+  participants: TournamentParticipant[]
   roundCompleted: RoundCompletedPayload | null
 }) {
   const leaderboard = finished?.finalLeaderboard ?? roundCompleted?.leaderboard ?? []
+  const participantByUserId = useMemo(
+    () => new Map(participants.map((participant) => [participant.userId, participant])),
+    [participants],
+  )
+  const getUserDisplayName = (userId: string) =>
+    getParticipantDisplayName(
+      participantByUserId.get(userId) ?? { userId, cumulativeScore: 0 },
+    )
 
   if (!roundCompleted && !finished) {
     return null
@@ -1177,12 +1180,9 @@ function LiveTournamentResults({
                 <span className="result-rank">#{index + 1}</span>
                 <div className="result-identity">
                   <strong>
-                    {ranking.authorId}
+                    {getUserDisplayName(ranking.authorId)}
                     {ranking.authorId === currentUserId ? ' · You' : ''}
                   </strong>
-                  <span className="result-submission-meta">
-                    Submission {ranking.submissionId}
-                  </span>
                 </div>
                 <div className="result-votes">
                   <span>{ranking.likeCount} likes</span>
@@ -1212,7 +1212,7 @@ function LiveTournamentResults({
             <li className="leaderboard-row" key={entry.userId}>
               <span className="leaderboard-rank">{entry.rank}</span>
               <strong>
-                {entry.userId}
+                {getUserDisplayName(entry.userId)}
                 {entry.userId === currentUserId ? ' · You' : ''}
               </strong>
               <span>{formatPoints(entry.cumulativeScore)}</span>
@@ -1227,10 +1227,16 @@ function LiveTournamentResults({
 function TournamentFinishedPanel({
   currentUserId,
   finished,
+  participants,
 }: {
   currentUserId: string | undefined
   finished: TournamentFinishedPayload
+  participants: TournamentParticipant[]
 }) {
+  const winner = participants.find(
+    (participant) => participant.userId === finished.overallWinnerId,
+  )
+
   return (
     <section
       className="tournament-phase-panel tournament-finished-panel"
@@ -1240,7 +1246,7 @@ function TournamentFinishedPanel({
       <h3>Tournament Finished</h3>
       {finished.overallWinnerId ? (
         <p data-testid="tournament-winner">
-          Winner: <strong>{finished.overallWinnerId}</strong>
+          Winner: <strong>{getParticipantDisplayName(winner)}</strong>
           {finished.overallWinnerId === currentUserId ? ' · You' : ''}
         </p>
       ) : (
@@ -1251,8 +1257,64 @@ function TournamentFinishedPanel({
   )
 }
 
+function ParticipantsSection({
+  currentUserId,
+  ownerId,
+  participants,
+}: {
+  currentUserId: string | undefined
+  ownerId: string
+  participants: TournamentParticipant[]
+}) {
+  return (
+    <section className="participants-section">
+      <h3>Participants</h3>
+
+      {participants.length === 0 ? <p>No participants yet.</p> : null}
+
+      {participants.map((participant) => (
+        <div
+          className="participant-row"
+          data-testid={`participant-${participant.userId}`}
+          key={participant.userId}
+        >
+          <p>
+            <strong>
+              {getParticipantDisplayName(participant)}
+              {participant.userId === currentUserId ? ' · You' : ''}
+            </strong>
+          </p>
+
+          <p>{participant.userId === ownerId ? 'Owner' : 'Participant'}</p>
+
+          <span>Score: {participant.cumulativeScore}</span>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function TournamentUnavailableState({ onGoHome }: { onGoHome: () => void }) {
+  return (
+    <main className="tournament-page tournament-page-unavailable">
+      <section className="tournament-unavailable-card">
+        <p className="eyebrow">Tournament access</p>
+        <h1>Tournament not found.</h1>
+        <p>
+          This tournament is no longer available to join, or your account does not have
+          access to the active match.
+        </p>
+        <button className="create-button" type="button" onClick={onGoHome}>
+          Go To Home Page
+        </button>
+      </section>
+    </main>
+  )
+}
+
 export function TournamentPage() {
   const { tournamentId } = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const currentUser = useAppSelector((state) => state.auth.user)
@@ -1295,7 +1357,10 @@ export function TournamentPage() {
   const tournament = fullTournament ?? draftTournament
   const baseParticipants = fullTournament?.participants ?? draftParticipants
   const baseParticipantKey = useMemo(
-    () => baseParticipants.map((participant) => participant.userId).join('|'),
+    () =>
+      baseParticipants
+        .map((participant) => `${participant.userId}:${participant.username ?? ''}`)
+        .join('|'),
     [baseParticipants],
   )
   const displayedParticipants = useMemo(() => {
@@ -1309,9 +1374,9 @@ export function TournamentPage() {
     )
     const displayedUserIds = new Set(displayed.map((participant) => participant.userId))
 
-    for (const userId of participantViewState.joinedUserIds) {
-      if (!displayedUserIds.has(userId)) {
-        displayed.push({ userId, cumulativeScore: 0 })
+    for (const participant of participantViewState.joinedParticipants) {
+      if (!displayedUserIds.has(participant.userId)) {
+        displayed.push(participant)
       }
     }
 
@@ -1323,8 +1388,9 @@ export function TournamentPage() {
   )
   const canAccessRealtimeRoom = Boolean(tournamentId && (isOwner || isParticipant))
 
-  const { connectionStatus, lastEvent, lastRecoveredAt, recentEvents } =
-    useTournamentRealtime(canAccessRealtimeRoom ? tournamentId : undefined)
+  const { connectionStatus, lastEvent, recentEvents } = useTournamentRealtime(
+    canAccessRealtimeRoom ? tournamentId : undefined,
+  )
 
   const latestRoundCompleted = useMemo(() => {
     const event = [...recentEvents].reverse().find((candidate) => {
@@ -1406,7 +1472,11 @@ export function TournamentPage() {
         dispatchParticipantView({
           type: 'participantJoined',
           baseKey: baseParticipantKey,
-          userId: payload.userId,
+          participant: {
+            userId: payload.userId,
+            ...(payload.username ? { username: payload.username } : {}),
+            cumulativeScore: 0,
+          },
         })
       }
 
@@ -1441,7 +1511,13 @@ export function TournamentPage() {
   }
 
   if (!tournament || !tournamentId || (isDraftError && isFullError)) {
-    return <p>Tournament not found.</p>
+    return (
+      <TournamentUnavailableState
+        onGoHome={() => {
+          void navigate('/')
+        }}
+      />
+    )
   }
 
   const activeTournament = tournament
@@ -1449,6 +1525,7 @@ export function TournamentPage() {
   const canJoin = displayedStatus === 'DRAFT' && !isOwner && !isParticipant
   const canLeave = displayedStatus === 'DRAFT' && !isOwner && isParticipant
   const canStart = displayedStatus === 'DRAFT' && isOwner
+  const isDraft = displayedStatus === 'DRAFT'
   const minimumParticipantsToStart = 4
   const hasEnoughParticipantsToStart =
     displayedParticipants.length >= minimumParticipantsToStart
@@ -1457,9 +1534,8 @@ export function TournamentPage() {
   )
 
   const handleJoin = async () => {
-    const joinPayload = draftTournament?.inviteToken
-      ? { tournamentId, inviteToken: draftTournament.inviteToken }
-      : { tournamentId }
+    const inviteToken = searchParams.get('inviteToken') ?? draftTournament?.inviteToken
+    const joinPayload = inviteToken ? { tournamentId, inviteToken } : { tournamentId }
 
     await joinTournament(joinPayload).unwrap()
     setHasJoined(true)
@@ -1467,7 +1543,11 @@ export function TournamentPage() {
       dispatchParticipantView({
         type: 'participantJoined',
         baseKey: baseParticipantKey,
-        userId: currentUser.id,
+        participant: {
+          userId: currentUser.id,
+          username: currentUser.username,
+          cumulativeScore: 0,
+        },
       })
     }
     await refetchDraftTournament()
@@ -1496,217 +1576,227 @@ export function TournamentPage() {
   }
 
   return (
-    <main className="create-tournament-page">
-      <section className="create-tournament-content">
-        <p className="eyebrow">Tournament Setup</p>
+    <main className="tournament-page">
+      <section className="tournament-layout">
+        <header className="tournament-page-header">
+          <div>
+            <p className="eyebrow">Tournament Setup</p>
+            <h2 className="sr-only">Tournament Created</h2>
+            <h1>{activeTournament.title}</h1>
+          </div>
+          <div className="tournament-header-status">
+            <span className="tournament-status-badge">{displayedStatus}</span>
+            {fullTournament ? (
+              <TournamentRealtimeBadge connectionStatus={connectionStatus} />
+            ) : null}
+          </div>
+        </header>
 
-        <h1 className="create-tournament-title">Tournament Created</h1>
+        <div className="tournament-main-card">
+          <div
+            className={`tournament-workspace${fullTournament ? '' : ' tournament-workspace-sidebar-only'}`}
+          >
+            {fullTournament || isDraft ? (
+              <section className="tournament-primary-column">
+                {fullTournament ? (
+                  tournamentFinished ? (
+                    <TournamentFinishedPanel
+                      currentUserId={currentUser?.id}
+                      finished={tournamentFinished}
+                      participants={scoredParticipants}
+                    />
+                  ) : (
+                    <TournamentRoundPhasePanel
+                      key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
+                      currentUserId={currentUser?.id}
+                      tournament={fullTournament}
+                      lastEvent={lastEvent}
+                      recentEvents={recentEvents}
+                    />
+                  )
+                ) : null}
 
-        <p className="create-tournament-description">
-          Tournament was created successfully. The owner is already added as a
-          participant.
-        </p>
-
-        <div className="create-tournament-card">
-          <h2>{activeTournament.title}</h2>
-
-          {fullTournament ? (
-            <>
-              <TournamentRealtimePanel
-                connectionStatus={connectionStatus}
-                lastEvent={lastEvent}
-                lastRecoveredAt={lastRecoveredAt}
-              />
-
-              {tournamentFinished ? (
-                <TournamentFinishedPanel
+                <LiveTournamentResults
                   currentUserId={currentUser?.id}
                   finished={tournamentFinished}
+                  participants={scoredParticipants}
+                  roundCompleted={latestRoundCompleted}
                 />
-              ) : (
-                <TournamentRoundPhasePanel
-                  key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
-                  currentUserId={currentUser?.id}
-                  tournament={fullTournament}
-                  lastEvent={lastEvent}
-                  recentEvents={recentEvents}
-                />
-              )}
 
-              <LiveTournamentResults
-                currentUserId={currentUser?.id}
-                finished={tournamentFinished}
-                roundCompleted={latestRoundCompleted}
-              />
-            </>
-          ) : null}
+                {isDraft ? (
+                  <>
+                    <ParticipantsSection
+                      currentUserId={currentUser?.id}
+                      ownerId={tournament.ownerId}
+                      participants={scoredParticipants}
+                    />
 
-          {joinError ? (
-            <p className="form-error">{getApiErrorMessage(joinError)}</p>
-          ) : null}
+                    {canStart ? (
+                      <section className="tournament-start-panel">
+                        <div>
+                          <h3 className="tournament-start-title">Ready to start?</h3>
+                          <p className="tournament-start-copy">
+                            {hasEnoughParticipantsToStart
+                              ? 'All required players are here. Start Round 1 when you are ready.'
+                              : `${displayedParticipants.length} of ${minimumParticipantsToStart} participants joined. The tournament needs at least ${minimumParticipantsToStart} players.`}
+                          </p>
+                        </div>
+                        <button
+                          className="create-button tournament-start-button"
+                          data-testid="start-tournament-button"
+                          disabled={isStarting || !hasEnoughParticipantsToStart}
+                          onClick={() => {
+                            void handleStart()
+                          }}
+                        >
+                          {isStarting ? 'Starting...' : 'Start Tournament'}
+                        </button>
+                      </section>
+                    ) : null}
+                  </>
+                ) : null}
+              </section>
+            ) : null}
 
-          {leaveError ? (
-            <p className="form-error">{getApiErrorMessage(leaveError)}</p>
-          ) : null}
+            <aside className="tournament-sidebar">
+              {joinError ? (
+                <p className="form-error">{getApiErrorMessage(joinError)}</p>
+              ) : null}
 
-          {startError ? (
-            <p className="form-error">{getApiErrorMessage(startError)}</p>
-          ) : null}
+              {leaveError ? (
+                <p className="form-error">{getApiErrorMessage(leaveError)}</p>
+              ) : null}
 
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Status:</strong> {displayedStatus}
-          </p>
+              {startError ? (
+                <p className="form-error">{getApiErrorMessage(startError)}</p>
+              ) : null}
 
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Visibility:</strong> {tournament.visibility}
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Rounds:</strong> {tournament.roundsCount}
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Submission duration:</strong> {tournament.submissionDurationSeconds}{' '}
-            seconds
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Vote duration:</strong> {tournament.voteDurationSeconds} seconds
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Realtime:</strong>{' '}
-            {canAccessRealtimeRoom
-              ? realtimeStatusCopy[connectionStatus].label
-              : 'Waiting'}
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Active users:</strong> {canAccessRealtimeRoom ? activeCount : 0}
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Participant count:</strong> {displayedParticipants.length}
-          </p>
-
-          <p
-            style={{
-              marginTop: '24px',
-              marginBottom: '24px',
-              wordBreak: 'break-word',
-            }}
-          >
-            <strong>Tournament ID:</strong>
-            <br />
-            {activeTournament.id}
-          </p>
-
-          <p style={{ marginBottom: '16px' }}>
-            <strong>Description:</strong>
-            <br />
-            {activeTournament.description ?? 'No description'}
-          </p>
-
-          <div style={{ marginBottom: '32px' }}>
-            <h3>Participants</h3>
-
-            {scoredParticipants.length === 0 ? <p>No participants yet.</p> : null}
-
-            {scoredParticipants.map((participant) => (
-              <div
-                data-testid={`participant-${participant.userId}`}
-                key={participant.userId}
-                style={{
-                  marginTop: '12px',
-                  padding: '16px',
-                  borderRadius: '16px',
-                  background: '#eef3fb',
-                }}
+              <section
+                className="tournament-details-grid"
+                aria-label="Tournament details"
               >
-                <p style={{ margin: 0 }}>
-                  <strong>
-                    {participant.userId === tournament.ownerId ? 'Owner' : 'Participant'}
-                    {participant.userId === currentUser?.id ? ' · You' : ''}
-                  </strong>
+                <p>
+                  <strong>Status:</strong> <span>{displayedStatus}</span>
                 </p>
+                <p>
+                  <strong>Visibility:</strong> <span>{tournament.visibility}</span>
+                </p>
+                <p>
+                  <strong>Rounds:</strong> <span>{tournament.roundsCount}</span>
+                </p>
+                <p>
+                  <strong>Submission duration:</strong>{' '}
+                  <span>{tournament.submissionDurationSeconds} seconds</span>
+                </p>
+                <p>
+                  <strong>Vote duration:</strong>{' '}
+                  <span>{tournament.voteDurationSeconds} seconds</span>
+                </p>
+                <p>
+                  <strong>Realtime:</strong>{' '}
+                  <span>
+                    {canAccessRealtimeRoom
+                      ? realtimeStatusCopy[connectionStatus].label
+                      : 'Waiting'}
+                  </span>
+                </p>
+                <p>
+                  <strong>Active users:</strong>{' '}
+                  <span>{canAccessRealtimeRoom ? activeCount : 0}</span>
+                </p>
+                <p>
+                  <strong>Participant count:</strong>{' '}
+                  <span>{displayedParticipants.length}</span>
+                </p>
+              </section>
 
-                <p
-                  style={{
-                    margin: '8px 0 0',
-                    wordBreak: 'break-word',
+              <section className="tournament-description-block">
+                <strong>Description</strong>
+                <p>{activeTournament.description ?? 'No description'}</p>
+              </section>
+
+              <section className="tournament-description-block tournament-id-block">
+                <strong>Tournament ID</strong>
+                <p>{activeTournament.id}</p>
+              </section>
+
+              <section
+                className="tournament-sidebar-actions"
+                aria-label="Tournament actions"
+              >
+                {hasLiveTournamentConflict && canJoin ? (
+                  <p className="live-tournament-conflict" role="alert">
+                    You are already active in another tournament. Return to that match
+                    before joining a new one.
+                  </p>
+                ) : null}
+
+                {canJoin ? (
+                  <button
+                    className="create-button"
+                    disabled={isJoining || hasLiveTournamentConflict}
+                    onClick={() => {
+                      void handleJoin()
+                    }}
+                  >
+                    {isJoining ? 'Joining...' : 'Join Tournament'}
+                  </button>
+                ) : null}
+
+                {canLeave ? (
+                  <button
+                    className="create-button tournament-danger-button"
+                    disabled={isLeaving}
+                    onClick={() => {
+                      void handleLeave()
+                    }}
+                  >
+                    {isLeaving ? 'Leaving...' : 'Leave Tournament'}
+                  </button>
+                ) : null}
+
+                <button
+                  className="create-button tournament-secondary-button"
+                  onClick={() => {
+                    void navigate('/')
                   }}
                 >
-                  {participant.userId}
-                </p>
+                  Back to Dashboard
+                </button>
+              </section>
 
-                <p style={{ margin: '8px 0 0' }}>Score: {participant.cumulativeScore}</p>
-              </div>
-            ))}
-          </div>
-
-          {canStart ? (
-            <section className="tournament-start-panel">
-              <div>
-                <h3 className="tournament-start-title">Ready to start?</h3>
-                <p className="tournament-start-copy">
-                  {hasEnoughParticipantsToStart
-                    ? 'All required players are here. Start Round 1 when you are ready.'
-                    : `${displayedParticipants.length} of ${minimumParticipantsToStart} participants joined. The tournament needs at least ${minimumParticipantsToStart} players.`}
-                </p>
-              </div>
-              <button
-                className="create-button tournament-start-button"
-                data-testid="start-tournament-button"
-                disabled={isStarting || !hasEnoughParticipantsToStart}
-                onClick={() => {
-                  void handleStart()
-                }}
-              >
-                {isStarting ? 'Starting...' : 'Start Tournament'}
-              </button>
-            </section>
-          ) : null}
-
-          {canJoin ? (
-            <>
-              {hasLiveTournamentConflict ? (
-                <p className="live-tournament-conflict" role="alert">
-                  You are already active in another tournament. Return to that match
-                  before joining a new one.
-                </p>
+              {!isDraft ? (
+                <ParticipantsSection
+                  currentUserId={currentUser?.id}
+                  ownerId={tournament.ownerId}
+                  participants={scoredParticipants}
+                />
               ) : null}
-              <button
-                className="create-button"
-                disabled={isJoining || hasLiveTournamentConflict}
-                onClick={() => {
-                  void handleJoin()
-                }}
-              >
-                {isJoining ? 'Joining...' : 'Join Tournament'}
-              </button>
-            </>
-          ) : null}
 
-          {canLeave ? (
-            <button
-              className="create-button"
-              disabled={isLeaving}
-              onClick={() => {
-                void handleLeave()
-              }}
-            >
-              {isLeaving ? 'Leaving...' : 'Leave Tournament'}
-            </button>
-          ) : null}
-
-          <button
-            className="create-button"
-            onClick={() => {
-              void navigate('/')
-            }}
-          >
-            Go To Home Page
-          </button>
+              {!isDraft && canStart ? (
+                <section className="tournament-start-panel">
+                  <div>
+                    <h3 className="tournament-start-title">Ready to start?</h3>
+                    <p className="tournament-start-copy">
+                      {hasEnoughParticipantsToStart
+                        ? 'All required players are here. Start Round 1 when you are ready.'
+                        : `${displayedParticipants.length} of ${minimumParticipantsToStart} participants joined. The tournament needs at least ${minimumParticipantsToStart} players.`}
+                    </p>
+                  </div>
+                  <button
+                    className="create-button tournament-start-button"
+                    data-testid="start-tournament-button"
+                    disabled={isStarting || !hasEnoughParticipantsToStart}
+                    onClick={() => {
+                      void handleStart()
+                    }}
+                  >
+                    {isStarting ? 'Starting...' : 'Start Tournament'}
+                  </button>
+                </section>
+              ) : null}
+            </aside>
+          </div>
         </div>
       </section>
     </main>
