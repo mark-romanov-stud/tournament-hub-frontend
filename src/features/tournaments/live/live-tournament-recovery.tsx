@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { useAppSelector } from '@/app/providers/store'
 import { useGetLiveTournamentQuery } from '@/features/auth/api/auth-api'
@@ -10,6 +10,8 @@ function formatPhase(phase: string) {
 }
 
 export function LiveTournamentRecoveryProvider({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const userId = useAppSelector((state) => state.auth.user?.id)
   const { data, isLoading } = useGetLiveTournamentQuery(userId ?? '', {
     skip: !userId,
@@ -22,10 +24,26 @@ export function LiveTournamentRecoveryProvider({ children }: { children: ReactNo
     () => ({ activeTournament, isLoading }),
     [activeTournament, isLoading],
   )
+  const liveTournamentPath = activeTournament
+    ? `/tournaments/${activeTournament.id}`
+    : null
+  const shouldShowRecoveryBanner =
+    Boolean(activeTournament) && location.pathname !== liveTournamentPath
+
+  const handleReturnToLiveMatch = () => {
+    if (!activeTournament || !liveTournamentPath) {
+      return
+    }
+
+    void navigate(liveTournamentPath, {
+      replace: location.pathname === liveTournamentPath,
+      state: { returnedToLiveMatchAt: Date.now() },
+    })
+  }
 
   return (
     <LiveTournamentRecoveryContext.Provider value={contextValue}>
-      {activeTournament ? (
+      {activeTournament && shouldShowRecoveryBanner ? (
         <aside
           className="live-tournament-recovery"
           data-testid="live-tournament-recovery"
@@ -39,12 +57,13 @@ export function LiveTournamentRecoveryProvider({ children }: { children: ReactNo
               Round {activeTournament.roundNumber} · {formatPhase(activeTournament.phase)}
             </small>
           </div>
-          <Link
+          <button
             className="live-tournament-recovery__action"
-            to={`/tournaments/${activeTournament.id}`}
+            type="button"
+            onClick={handleReturnToLiveMatch}
           >
             Return to Live Match
-          </Link>
+          </button>
         </aside>
       ) : null}
       {children}

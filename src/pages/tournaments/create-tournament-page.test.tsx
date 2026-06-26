@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { renderApp } from '@/app/test/render-app'
@@ -32,7 +32,7 @@ describe('CreateTournamentPage live tournament conflict', () => {
       },
     })
 
-    renderApp(['/tournaments/create'])
+    const { router, user } = renderApp(['/tournaments/create'])
 
     expect(
       await screen.findByRole('heading', {
@@ -41,9 +41,11 @@ describe('CreateTournamentPage live tournament conflict', () => {
     ).toBeVisible()
     expect(await screen.findByText(/finish your active tournament/i)).toBeVisible()
     expect(screen.getByRole('button', { name: /create tournament/i })).toBeDisabled()
-    expect(screen.getByRole('link', { name: /return to live match/i })).toHaveAttribute(
-      'href',
-      '/tournaments/active-tournament-id',
-    )
+
+    await user.click(screen.getByRole('button', { name: /return to live match/i }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/tournaments/active-tournament-id')
+    })
   })
 })

@@ -87,7 +87,7 @@ describe('Authenticated routing', () => {
       refreshToken: DEFAULT_AUTH_STATE.refreshToken,
     })
 
-    renderApp(['/'])
+    const { router, user } = renderApp(['/'])
 
     expect(await screen.findByTestId('live-tournament-recovery')).toHaveTextContent(
       'Live Recovery Match',
@@ -96,10 +96,14 @@ describe('Authenticated routing', () => {
       'Round 2 · Voting',
     )
 
-    expect(screen.getByRole('link', { name: /return to live match/i })).toHaveAttribute(
-      'href',
-      `/tournaments/${liveTournament.id}`,
-    )
+    await user.click(screen.getByRole('button', { name: /return to live match/i }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(`/tournaments/${liveTournament.id}`)
+    })
+    await waitFor(() => {
+      expect(screen.queryByTestId('live-tournament-recovery')).not.toBeInTheDocument()
+    })
   })
 
   it('does not show recovery UI when the user has no active tournament', async () => {

@@ -532,6 +532,53 @@ describe('TournamentPage realtime flow', () => {
     expect(screen.queryByText('Second revealed answer')).not.toBeInTheDocument()
   })
 
+  it('restores the current voting submission from the full tournament state', async () => {
+    const roundId = '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5'
+    const submissionId = '8f2c604f-0adc-418a-93f1-67e3c74be770'
+
+    setMockTournamentState({
+      ...DEFAULT_TOURNAMENT_STATE,
+      status: 'ACTIVE',
+      participants: [
+        ...DEFAULT_TOURNAMENT_STATE.participants,
+        { userId: 'participant-2', username: 'participant_two', cumulativeScore: 0 },
+      ],
+      currentRound: {
+        id: roundId,
+        number: 2,
+        phase: 'VOTING',
+        prompt: {
+          key: 'alien_impress',
+          type: 'TEXT',
+          content: 'The best way to impress an alien visiting Earth.',
+        },
+        submissionDeadline: new Date(Date.now() - 60_000).toISOString(),
+        submissionClosedAt: new Date(Date.now() - 30_000).toISOString(),
+        votingDeadline: new Date(Date.now() + 30_000).toISOString(),
+        voting: {
+          stepStatus: 'OPEN',
+          currentSubmission: {
+            id: submissionId,
+            authorId: 'participant-2',
+            content: 'Recovered revealed answer',
+            submittedAt: new Date().toISOString(),
+          },
+          revealIndex: 0,
+          totalSubmissions: 2,
+          votingDeadline: new Date(Date.now() + 30_000).toISOString(),
+        },
+      },
+    })
+
+    renderApp([`/tournaments/${DEFAULT_TOURNAMENT_STATE.id}`])
+
+    expect(await screen.findByText('Recovered revealed answer')).toBeVisible()
+    expect(screen.getByText('Submission 1 of 2')).toBeVisible()
+    expect(
+      screen.queryByText(/waiting for the next submission to be revealed/i),
+    ).not.toBeInTheDocument()
+  })
+
   it('shows round rankings, updates cumulative standings, and switches to the next round from realtime events', async () => {
     const roundId = '18d6ff5b-cc66-4cb8-8728-6e3d2f59f0d5'
     const nextRoundId = '3f8c87b0-28a4-4e83-bc57-1b22e17f5d2a'
@@ -714,9 +761,6 @@ describe('TournamentPage realtime flow', () => {
     ).toBeVisible()
     expect(screen.getByText(/already active in another tournament/i)).toBeVisible()
     expect(screen.getByRole('button', { name: /join tournament/i })).toBeDisabled()
-    expect(screen.getByRole('link', { name: /return to live match/i })).toHaveAttribute(
-      'href',
-      '/tournaments/active-tournament-id',
-    )
+    expect(screen.getByRole('button', { name: /return to live match/i })).toBeVisible()
   })
 })

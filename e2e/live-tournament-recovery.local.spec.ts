@@ -140,8 +140,8 @@ test.describe('active live tournament app recovery', () => {
     await expect(recoveryBanner).toContainText(activeTitle)
     await expect(recoveryBanner).toContainText(/round 1/i)
     await expect(
-      page.getByRole('link', { name: /return to live match/i }),
-    ).toHaveAttribute('href', `/tournaments/${activeTournament.id}`)
+      page.getByRole('button', { name: /return to live match/i }),
+    ).toBeVisible()
     await expect(
       page.getByRole('button', { name: /finish live match first/i }),
     ).toBeDisabled()
@@ -162,9 +162,10 @@ test.describe('active live tournament app recovery', () => {
 
     await Promise.all([
       page.waitForURL(`/tournaments/${activeTournament.id}`),
-      page.getByRole('link', { name: /return to live match/i }).click(),
+      page.getByRole('button', { name: /return to live match/i }).click(),
     ])
     await expect(page.getByRole('heading', { name: activeTitle })).toBeVisible()
+    await expect(recoveryBanner).toHaveCount(0)
 
     await session.context.close()
   })

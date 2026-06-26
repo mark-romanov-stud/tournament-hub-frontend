@@ -668,10 +668,13 @@ input::placeholder {
 .live-tournament-recovery__action {
   padding: 10px 14px;
   color: #0d1b3d;
+  font: inherit;
   background: #fff;
+  border: 0;
   border-radius: 12px;
   font-size: 0.9rem;
   font-weight: 800;
+  cursor: pointer;
   white-space: nowrap;
 }
 
