@@ -8,6 +8,7 @@ import {
   type RoundPromptContent,
   type TournamentParticipant,
   type TournamentVoteValue,
+  useCancelTournamentMutation,
   useGetFullTournamentQuery,
   useGetTournamentQuery,
   useJoinTournamentMutation,
@@ -185,6 +186,12 @@ interface TournamentFinishedPayload {
   occurredAt: string
 }
 
+interface TournamentCancelledPayload {
+  tournamentId: string
+  status: 'CANCELLED'
+  occurredAt: string
+}
+
 interface SequentialVotingState {
   currentReveal: VotingSubmissionRevealedPayload | null
   finalizedResult: VoteFinalizedPayload | null
@@ -195,6 +202,7 @@ interface SequentialVotingState {
 
 type SequentialVotingAction =
   | { type: 'event'; event: TournamentRealtimeEvent; roundId: string }
+  | { type: 'hydrateReveal'; reveal: VotingSubmissionRevealedPayload }
   | { type: 'voteSaved'; submissionId: string; value: TournamentVoteValue }
 
 const initialSequentialVotingState: SequentialVotingState = {
@@ -215,6 +223,30 @@ function getParticipantDisplayName(participant: TournamentParticipant | undefine
   }
 
   return participant?.userId ?? 'Unknown participant'
+}
+
+function normalizeInviteToken(value: string | null | undefined) {
+  const token = value?.trim()
+
+  if (!token) {
+    return undefined
+  }
+
+  return token
+}
+
+function getInviteTokenStorageKey(tournamentId: string) {
+  return `tournament-hub.invite-token.${tournamentId}`
+}
+
+function readStoredInviteToken(tournamentId: string | undefined) {
+  if (!tournamentId) {
+    return undefined
+  }
+
+  return normalizeInviteToken(
+    sessionStorage.getItem(getInviteTokenStorageKey(tournamentId)),
+  )
 }
 
 const realtimeStatusCopy: Record<
@@ -383,6 +415,20 @@ function sequentialVotingReducer(
   state: SequentialVotingState,
   action: SequentialVotingAction,
 ): SequentialVotingState {
+  if (action.type === 'hydrateReveal') {
+    if (state.currentReveal?.submission.id === action.reveal.submission.id) {
+      return state
+    }
+
+    return {
+      currentReveal: action.reveal,
+      finalizedResult: null,
+      progress: null,
+      savedVote: null,
+      status: 'open',
+    }
+  }
+
   if (action.type === 'voteSaved') {
     if (state.currentReveal?.submission.id !== action.submissionId) {
       return state
@@ -617,6 +663,17 @@ function isTournamentFinishedPayload(
   )
 }
 
+function isTournamentCancelledPayload(
+  payload: unknown,
+): payload is TournamentCancelledPayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.tournamentId === 'string' &&
+    payload.status === 'CANCELLED' &&
+    typeof payload.occurredAt === 'string'
+  )
+}
+
 function isParticipantEventPayload(payload: unknown): payload is ParticipantEventPayload {
   return (
     isRecord(payload) &&
@@ -714,6 +771,7 @@ function TournamentRoundPhasePanel({
             submissionDeadline: payload.submissionDeadline,
             submissionClosedAt: null,
             votingDeadline: null,
+            voting: null,
           },
           totalActiveParticipants: tournament.participants.length,
         })
@@ -824,6 +882,7 @@ function TournamentRoundPhasePanel({
       currentUserId={currentUserId}
       recentEvents={recentEvents}
       round={currentRound}
+      tournamentId={tournament.id}
     />
   )
 }
@@ -832,10 +891,12 @@ function SequentialVotingPanel({
   currentUserId,
   recentEvents,
   round,
+  tournamentId,
 }: {
   currentUserId: string | undefined
   recentEvents: TournamentRealtimeEvent[]
   round: NonNullable<FullTournament['currentRound']>
+  tournamentId: string
 }) {
   const [viewState, dispatch] = useReducer(
     sequentialVotingReducer,
@@ -846,6 +907,25 @@ function SequentialVotingPanel({
   const remainingSeconds = useRemainingSeconds(
     viewState.currentReveal?.votingDeadline ?? round.votingDeadline,
   )
+
+  useEffect(() => {
+    if (!round.voting?.currentSubmission || round.voting.revealIndex === null) {
+      return
+    }
+
+    dispatch({
+      type: 'hydrateReveal',
+      reveal: {
+        tournamentId,
+        roundId: round.id,
+        submission: round.voting.currentSubmission,
+        revealIndex: round.voting.revealIndex,
+        totalSubmissions: round.voting.totalSubmissions,
+        votingDeadline: round.voting.votingDeadline ?? round.votingDeadline ?? '',
+        occurredAt: new Date().toISOString(),
+      },
+    })
+  }, [round.voting, round.id, round.votingDeadline, tournamentId])
 
   useEffect(() => {
     for (const event of recentEvents) {
@@ -1257,6 +1337,23 @@ function TournamentFinishedPanel({
   )
 }
 
+function TournamentCancelledPanel() {
+  return (
+    <section
+      className="tournament-phase-panel tournament-cancelled-panel"
+      aria-live="polite"
+      data-testid="tournament-cancelled-panel"
+    >
+      <p className="tournament-phase-eyebrow">Cancelled by owner</p>
+      <h3>Tournament Cancelled</h3>
+      <p>
+        The owner cancelled this tournament before it started. No rounds were played and
+        all participants were removed.
+      </p>
+    </section>
+  )
+}
+
 function ParticipantsSection({
   currentUserId,
   ownerId,
@@ -1285,9 +1382,11 @@ function ParticipantsSection({
             </strong>
           </p>
 
-          <p>{participant.userId === ownerId ? 'Owner' : 'Participant'}</p>
-
           <span>Score: {participant.cumulativeScore}</span>
+
+          <p className="participant-role">
+            {participant.userId === ownerId ? 'Owner' : 'Participant'}
+          </p>
         </div>
       ))}
     </section>
@@ -1320,6 +1419,17 @@ export function TournamentPage() {
   const currentUser = useAppSelector((state) => state.auth.user)
   const { activeTournament: recoveredTournament } = useLiveTournamentRecovery()
   const [hasJoined, setHasJoined] = useState(false)
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false)
+  const inviteTokenFromQuery = normalizeInviteToken(searchParams.get('inviteToken'))
+
+  useEffect(() => {
+    if (!tournamentId || !inviteTokenFromQuery) {
+      return
+    }
+
+    sessionStorage.setItem(getInviteTokenStorageKey(tournamentId), inviteTokenFromQuery)
+  }, [inviteTokenFromQuery, tournamentId])
+
   const [participantViewState, dispatchParticipantView] = useReducer(
     tournamentParticipantViewReducer,
     initialTournamentParticipantViewState,
@@ -1416,6 +1526,18 @@ export function TournamentPage() {
     return event && isTournamentFinishedPayload(event.payload) ? event.payload : null
   }, [recentEvents, tournamentId])
 
+  const tournamentCancelled = useMemo(() => {
+    const event = [...recentEvents].reverse().find((candidate) => {
+      return (
+        candidate.name === 'tournament:cancelled' &&
+        isTournamentCancelledPayload(candidate.payload) &&
+        candidate.payload.tournamentId === tournamentId
+      )
+    })
+
+    return event && isTournamentCancelledPayload(event.payload) ? event.payload : null
+  }, [recentEvents, tournamentId])
+
   useEffect(() => {
     if (
       !tournamentFinished ||
@@ -1459,6 +1581,9 @@ export function TournamentPage() {
 
   const [startTournament, { isLoading: isStarting, error: startError }] =
     useStartTournamentMutation()
+
+  const [cancelTournament, { isLoading: isCancelling, error: cancelError }] =
+    useCancelTournamentMutation()
 
   useEffect(() => {
     if (!lastEvent || !tournamentId) {
@@ -1521,10 +1646,12 @@ export function TournamentPage() {
   }
 
   const activeTournament = tournament
-  const displayedStatus = tournamentFinished?.status ?? tournament.status
+  const displayedStatus =
+    tournamentCancelled?.status ?? tournamentFinished?.status ?? tournament.status
   const canJoin = displayedStatus === 'DRAFT' && !isOwner && !isParticipant
   const canLeave = displayedStatus === 'DRAFT' && !isOwner && isParticipant
   const canStart = displayedStatus === 'DRAFT' && isOwner
+  const canCancel = displayedStatus === 'DRAFT' && isOwner
   const isDraft = displayedStatus === 'DRAFT'
   const minimumParticipantsToStart = 4
   const hasEnoughParticipantsToStart =
@@ -1532,10 +1659,16 @@ export function TournamentPage() {
   const hasLiveTournamentConflict = Boolean(
     recoveredTournament && recoveredTournament.id !== tournamentId,
   )
+  const knownInviteToken = inviteTokenFromQuery ?? readStoredInviteToken(tournamentId)
+  const inviteLink =
+    draftTournament?.visibility === 'PRIVATE' && knownInviteToken
+      ? `${window.location.origin}/tournaments/${tournamentId}?inviteToken=${knownInviteToken}`
+      : null
 
   const handleJoin = async () => {
-    const inviteToken = searchParams.get('inviteToken') ?? draftTournament?.inviteToken
-    const joinPayload = inviteToken ? { tournamentId, inviteToken } : { tournamentId }
+    const joinPayload = knownInviteToken
+      ? { tournamentId, inviteToken: knownInviteToken }
+      : { tournamentId }
 
     await joinTournament(joinPayload).unwrap()
     setHasJoined(true)
@@ -1566,10 +1699,43 @@ export function TournamentPage() {
     await refetchDraftTournament()
   }
 
+  const handleCopyInviteLink = async () => {
+    if (!inviteLink) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteLink)
+      setInviteLinkCopied(true)
+      window.setTimeout(() => {
+        setInviteLinkCopied(false)
+      }, 2000)
+    } catch {
+      // Clipboard access can be denied by the browser; the link text is still selectable.
+    }
+  }
+
   const handleStart = async () => {
     try {
       await startTournament(tournamentId).unwrap()
       await Promise.all([refetchDraftTournament(), refetchFullTournament()])
+    } catch {
+      // RTK Query exposes the error state rendered below.
+    }
+  }
+
+  const handleCancel = async () => {
+    if (
+      !window.confirm(
+        'Cancel this tournament? All participants will be removed and this cannot be undone.',
+      )
+    ) {
+      return
+    }
+
+    try {
+      await cancelTournament(tournamentId).unwrap()
+      void navigate('/')
     } catch {
       // RTK Query exposes the error state rendered below.
     }
@@ -1605,6 +1771,8 @@ export function TournamentPage() {
                       finished={tournamentFinished}
                       participants={scoredParticipants}
                     />
+                  ) : tournamentCancelled ? (
+                    <TournamentCancelledPanel />
                   ) : (
                     <TournamentRoundPhasePanel
                       key={`${fullTournament.id}-${fullTournament.currentRound?.id ?? 'waiting'}`}
@@ -1671,6 +1839,10 @@ export function TournamentPage() {
                 <p className="form-error">{getApiErrorMessage(startError)}</p>
               ) : null}
 
+              {cancelError ? (
+                <p className="form-error">{getApiErrorMessage(cancelError)}</p>
+              ) : null}
+
               <section
                 className="tournament-details-grid"
                 aria-label="Tournament details"
@@ -1720,6 +1892,25 @@ export function TournamentPage() {
                 <p>{activeTournament.id}</p>
               </section>
 
+              {isOwner &&
+              isDraft &&
+              draftTournament?.visibility === 'PRIVATE' &&
+              inviteLink ? (
+                <section className="tournament-description-block tournament-invite-block">
+                  <strong>Invite Link</strong>
+                  <p>{inviteLink}</p>
+                  <button
+                    className="create-button tournament-secondary-button tournament-invite-copy"
+                    type="button"
+                    onClick={() => {
+                      void handleCopyInviteLink()
+                    }}
+                  >
+                    {inviteLinkCopied ? 'Copied!' : 'Copy Invite Link'}
+                  </button>
+                </section>
+              ) : null}
+
               <section
                 className="tournament-sidebar-actions"
                 aria-label="Tournament actions"
@@ -1752,6 +1943,19 @@ export function TournamentPage() {
                     }}
                   >
                     {isLeaving ? 'Leaving...' : 'Leave Tournament'}
+                  </button>
+                ) : null}
+
+                {canCancel ? (
+                  <button
+                    className="create-button tournament-danger-button"
+                    data-testid="cancel-tournament-button"
+                    disabled={isCancelling}
+                    onClick={() => {
+                      void handleCancel()
+                    }}
+                  >
+                    {isCancelling ? 'Cancelling...' : 'Cancel Tournament'}
                   </button>
                 ) : null}
 

@@ -217,10 +217,10 @@ export function HomePage() {
 
               <p className="dashboard-modal__copy">
                 Paste a tournament UUID for a public room. For a private room, paste the
-                invite link from the owner, or use tournament UUID and invite token in the
-                format UUID:INVITE_TOKEN. The owner can copy the tournament UUID from the
-                tournament page, and the private invite link from the browser address
-                after creating the private tournament.
+                invite link the owner shared with you, or use tournament UUID and invite
+                token in the format UUID:INVITE_TOKEN. Owners can copy the invite link
+                anytime from the &quot;Invite Link&quot; section on the tournament page,
+                while it is still in draft.
               </p>
 
               <form className="dashboard-join-code" onSubmit={handleJoinByCode}>

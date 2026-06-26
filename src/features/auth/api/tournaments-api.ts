@@ -67,6 +67,18 @@ export interface FullTournament {
     submissionDeadline: string
     submissionClosedAt: string | null
     votingDeadline: string | null
+    voting: {
+      stepStatus: 'IDLE' | 'OPEN' | 'FINALIZING' | 'FINISHED'
+      currentSubmission: {
+        id: string
+        authorId: string
+        content: string
+        submittedAt: string
+      } | null
+      revealIndex: number | null
+      totalSubmissions: number
+      votingDeadline: string | null
+    } | null
   } | null
 }
 
@@ -207,10 +219,19 @@ export const tournamentsApi = authApi.injectEndpoints({
       }),
       transformResponse: (response: { data: boolean }) => response.data,
     }),
+
+    cancelTournament: builder.mutation<boolean, string>({
+      query: (tournamentId) => ({
+        url: `/tournaments/${tournamentId}/cancel`,
+        method: 'POST',
+      }),
+      transformResponse: (response: { data: boolean }) => response.data,
+    }),
   }),
 })
 
 export const {
+  useCancelTournamentMutation,
   useCreateTournamentMutation,
   useGetFullTournamentQuery,
   useGetTournamentQuery,

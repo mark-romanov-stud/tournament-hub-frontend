@@ -446,6 +446,11 @@ test.describe('local backend draft lobby join flow', () => {
       new RegExp(`/tournaments/${tournament.id}\\?inviteToken=${tournament.inviteToken}`),
     )
 
+    const joinRequest = page.waitForRequest(
+      (requestInfo) =>
+        requestInfo.url().endsWith(`/api/v1/tournaments/${tournament.id}/join`) &&
+        requestInfo.method() === 'POST',
+    )
     const joinResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith(`/api/v1/tournaments/${tournament.id}/join`) &&
@@ -453,6 +458,9 @@ test.describe('local backend draft lobby join flow', () => {
     )
 
     await page.getByRole('button', { name: /join tournament/i }).click()
+    expect((await joinRequest).postDataJSON()).toEqual({
+      inviteToken: tournament.inviteToken,
+    })
     await expect((await joinResponse).ok()).toBe(true)
     await expect(page.getByText(participant.username)).toBeVisible()
     await expect(page.getByText('Participant count: 2')).toBeVisible()

@@ -76,6 +76,18 @@ export interface MockTournamentState {
     submissionDeadline: string
     submissionClosedAt: string | null
     votingDeadline: string | null
+    voting?: {
+      stepStatus: string
+      currentSubmission: {
+        id: string
+        authorId: string
+        content: string
+        submittedAt: string
+      } | null
+      revealIndex: number | null
+      totalSubmissions: number
+      votingDeadline: string | null
+    } | null
   }
 }
 

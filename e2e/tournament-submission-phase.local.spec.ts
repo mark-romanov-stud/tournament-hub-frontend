@@ -386,7 +386,6 @@ test.describe('local backend submission phase UI', () => {
       content: `
         .live-tournament-recovery { display: none; }
         .live-results-panel { height: 860px; overflow: hidden; }
-        .result-identity { height: 112px; overflow: hidden; }
       `,
     })
 
